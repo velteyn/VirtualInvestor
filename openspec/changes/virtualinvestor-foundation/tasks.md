@@ -43,7 +43,7 @@
 
 - [x] 6.1 Define the `Participant` abstraction (account, buying power, order entry, fills) and refactor the engine to accept all traders through it; verify a test where a scripted in-process participant trades identically to a simulated human command.
 - [x] 6.2 Implement account and position accounting with mark-to-market equity; verify tests for average price, realized/unrealized P&L, and short positions.
-- [ ] 6.3 Implement the market-maker strategy quoting around fundamentals with inventory skew; verify a test that spreads widen as volatility rises and inventory skews quotes.
+- [x] 6.3 Implement the market-maker strategy quoting around fundamentals with inventory skew; verify a test that spreads widen as volatility rises and inventory skews quotes.
 - [ ] 6.4 Implement momentum, value, scalper, and news-hunter rival strategies; verify a scripted-news test where each rival reacts in its declared direction.
 - [ ] 6.5 Implement institution strategies (VWAP execution and macro reaction) and exclude them from ranking; verify a test that institution fills move price and that institutions are absent from the leaderboard projection.
 - [ ] 6.6 Document the bot roster, their identities, and strategies in `docs/bots.md`; verify the document lists all five rivals and the institutions.
