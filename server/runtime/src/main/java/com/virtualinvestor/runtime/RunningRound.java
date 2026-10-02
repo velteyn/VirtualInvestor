@@ -98,6 +98,8 @@ public final class RunningRound {
     private final java.util.Set<String> processedCommands = new java.util.LinkedHashSet<>();
 
     private WorldJournal journal = WorldJournal.noop();
+    private EventPublisher publisher = EventPublisher.noop();
+    private long sequence;
     private boolean warmedUp;
     private Map<String, List<Bar>> history = Map.of();
     private Map<String, Auction> activeAuctions = new LinkedHashMap<>();
@@ -202,6 +204,10 @@ public final class RunningRound {
 
     public void setJournal(WorldJournal journal) {
         this.journal = Objects.requireNonNull(journal, "journal");
+    }
+
+    public void setPublisher(EventPublisher publisher) {
+        this.publisher = Objects.requireNonNull(publisher, "publisher");
     }
 
     public void addListener(Consumer<List<GameEvent>> listener) {
@@ -448,6 +454,8 @@ public final class RunningRound {
     private void publish(List<GameEvent> events) {
         journal.append(events);
         journal.checkpoint(clock.tick());
+        sequence += events.size();
+        publisher.publish(events, sequence);
         for (Consumer<List<GameEvent>> listener : listeners) {
             listener.accept(events);
         }

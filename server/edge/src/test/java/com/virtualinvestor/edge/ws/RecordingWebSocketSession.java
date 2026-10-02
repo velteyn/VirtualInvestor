@@ -18,12 +18,12 @@ import org.springframework.web.socket.WebSocketSession;
  * full {@link WebSocketSession} surface because Spring 7 declares more members (addresses,
  * message-size limits) than earlier versions.
  */
-final class RecordingWebSocketSession implements WebSocketSession {
+public final class RecordingWebSocketSession implements WebSocketSession {
 
     private final List<String> sent = new ArrayList<>();
     private boolean open = true;
 
-    List<String> sent() {
+    public List<String> sent() {
         return sent;
     }
 

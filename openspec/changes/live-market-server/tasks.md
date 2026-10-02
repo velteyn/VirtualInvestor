@@ -26,9 +26,9 @@
 
 ## 5. Streaming
 
-- [ ] 5.1 Map the loop's core events to wire payloads and hand them to `MarketBroadcaster`; verify a subscriber receives trade, bar, news and order frames.
-- [ ] 5.2 Keep depth coalescing and ensure a slow/dead session does not stall the loop; verify a test with a failing session.
-- [ ] 5.3 Stream sequence/tick on events and support catch-up from a subscriber's last sequence; verify a reconnect test that returns only missed events.
+- [x] 5.1 Map the loop's core events to wire payloads and hand them to `MarketBroadcaster`; verify a subscriber receives trade, bar, news and order frames.
+- [x] 5.2 Keep depth coalescing and ensure a slow/dead session does not stall the loop; verify a test with a failing session.
+- [x] 5.3 Stream sequence/tick on events and support catch-up from a subscriber's last sequence; verify a reconnect test that returns only missed events.
 
 ## 6. Lifecycle and recovery
 
