@@ -59,7 +59,7 @@
 ## 8. Game layer: rounds, ranking, settlement
 
 - [x] 8.1 Implement the launch pad configuration model (capital, duration, realism preset) with range validation; verify tests for accepted and rejected configurations.
-- [ ] 8.2 Implement round lifecycle states (created, warm-up, running, closing, settled) with `seed + config` identity; verify a lifecycle test asserts allowed transitions only.
+- [x] 8.2 Implement round lifecycle states (created, warm-up, running, closing, settled) with `seed + config` identity; verify a lifecycle test asserts allowed transitions only.
 - [ ] 8.3 Implement the warm-up phase that generates history and pre-seeds books before trading; verify a test that bars exist and the book is non-empty on session open.
 - [ ] 8.4 Implement ranking by final equity with return-on-capital as a secondary figure, seeding rivals with the player's capital; verify a test that unequal capital inputs still rank rivals fairly.
 - [ ] 8.5 Implement margin call detection, liquidation, and settlement (mark to close, force-close margin positions, finalize ranking); verify tests for a mid-session liquidation and an end-of-session settlement.
