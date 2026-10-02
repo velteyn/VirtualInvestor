@@ -54,7 +54,7 @@
 - [x] 7.2 Implement scheduled and random event generation seeded per round, with cadence scaled to session length; verify a same-seed test produces identical event times.
 - [x] 7.3 Implement rumor-then-confirm/deny staging with market reaction at rumor time; verify a test showing a price move at rumor and a further move at confirmation/denial.
 - [x] 7.4 Wire news impact to fundamentals and the volatility state; verify a test showing higher realized volatility and wider spreads after a significant event.
-- [ ] 7.5 Document the taxonomy and impact model in `docs/news.md`; verify the document matches the implemented event set.
+- [x] 7.5 Document the taxonomy and impact model in `docs/news.md`; verify the document matches the implemented event set.
 
 ## 8. Game layer: rounds, ranking, settlement
 
