@@ -33,7 +33,7 @@
 
 ## 5. Market rules, sessions, and auctions
 
-- [ ] 5.1 Enforce tick-size rounding, quantity grid, and minimum quantity with explicit rejection reasons; verify tests for each rejection.
+- [x] 5.1 Enforce tick-size rounding, quantity grid, and minimum quantity with explicit rejection reasons; verify tests for each rejection.
 - [ ] 5.2 Implement short-sale availability and price bands/circuit breakers with halt and resume; verify tests for a halted instrument refusing orders and resuming after the period.
 - [ ] 5.3 Implement the intraday session state machine (pre-open, opening auction, continuous, closing auction) over the world clock; verify a timeline test asserts phase transitions at the right ticks.
 - [ ] 5.4 Implement opening and closing auctions that compute the volume-maximizing clearing price; verify tests for a known book producing the expected open and close.
