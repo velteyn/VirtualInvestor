@@ -447,6 +447,7 @@ public final class RunningRound {
 
     private void publish(List<GameEvent> events) {
         journal.append(events);
+        journal.checkpoint(clock.tick());
         for (Consumer<List<GameEvent>> listener : listeners) {
             listener.accept(events);
         }

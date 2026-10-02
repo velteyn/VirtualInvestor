@@ -21,8 +21,8 @@
 
 ## 4. Persistence wiring
 
-- [ ] 4.1 Append the loop's events through `BatchedEventLogWriter` without blocking the tick; verify events persist in order across many ticks.
-- [ ] 4.2 Checkpoint via `RoundRecoveryService.checkpoint` on a cadence; verify a snapshot exists and recovery from it equals a full replay (golden-master hash).
+- [x] 4.1 Append the loop's events through `BatchedEventLogWriter` without blocking the tick; verify events persist in order across many ticks.
+- [x] 4.2 Checkpoint via `RoundRecoveryService.checkpoint` on a cadence; verify a snapshot exists and recovery from it equals a full replay (golden-master hash).
 
 ## 5. Streaming
 
