@@ -36,6 +36,7 @@ public final class FundamentalModel {
     private final double sectorStepVol;
     private final double stepFraction;
 
+    private VolatilityState volatilityState;
     private double marketFactor;
 
     public FundamentalModel(
@@ -76,6 +77,14 @@ public final class FundamentalModel {
         }
     }
 
+    /**
+     * Attach a volatility state so a news-driven elevation scales each instrument's
+     * idiosyncratic diffusion. Null keeps base volatility.
+     */
+    public void setVolatilityState(VolatilityState volatilityState) {
+        this.volatilityState = volatilityState;
+    }
+
     /** Advance every factor and fundamental value by one step. */
     public void step() {
         double marketIncrement = marketStepVol * marketRandom.nextGaussian();
@@ -89,7 +98,8 @@ public final class FundamentalModel {
 
         for (Instrument instrument : universe.all()) {
             String ticker = instrument.ticker();
-            double idio = instrument.baseVolatility() * stepFraction * idioRandom.get(ticker).nextGaussian();
+            double multiplier = volatilityState == null ? 1.0 : volatilityState.multiplier(ticker);
+            double idio = instrument.baseVolatility() * multiplier * stepFraction * idioRandom.get(ticker).nextGaussian();
             double sectorIncrementFor = sectorIncrement.get(instrument.sector());
             double instrumentReturn = instrument.marketBeta() * marketIncrement
                     + instrument.sectorBeta() * sectorIncrementFor

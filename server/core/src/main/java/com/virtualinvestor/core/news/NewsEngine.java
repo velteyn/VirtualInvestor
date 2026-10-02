@@ -3,6 +3,7 @@ package com.virtualinvestor.core.news;
 import com.virtualinvestor.core.domain.NewsStage;
 import com.virtualinvestor.core.event.GameEvent;
 import com.virtualinvestor.core.fundamental.FundamentalModel;
+import com.virtualinvestor.core.fundamental.VolatilityState;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -17,9 +18,16 @@ public final class NewsEngine {
     private final FundamentalModel fundamentals;
     private final List<PlannedNews> timeline;
 
+    private VolatilityState volatilityState;
+
     public NewsEngine(FundamentalModel fundamentals, List<PlannedNews> timeline) {
         this.fundamentals = Objects.requireNonNull(fundamentals, "fundamentals");
         this.timeline = List.copyOf(timeline);
+    }
+
+    /** Attach a volatility state so significant news also elevates it for the affected names. */
+    public void setVolatilityState(VolatilityState volatilityState) {
+        this.volatilityState = volatilityState;
     }
 
     public List<GameEvent> advance(long tick) {
@@ -52,6 +60,9 @@ public final class NewsEngine {
         if (signedMagnitude == 0.0) {
             return;
         }
-        fundamentals.applyNews(item.scope(), item.symbol(), item.sector(), signedMagnitude);
+        List<String> affected = fundamentals.applyNews(item.scope(), item.symbol(), item.sector(), signedMagnitude);
+        if (volatilityState != null) {
+            volatilityState.bumpAll(affected, Math.abs(signedMagnitude));
+        }
     }
 }
