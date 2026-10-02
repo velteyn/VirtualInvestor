@@ -29,7 +29,7 @@
 - [x] 4.2 Implement MARKET and LIMIT matching with partial fills; verify tests for full fill, partial fill with remainder resting, and rejection per type.
 - [x] 4.3 Implement STOP and STOP-LIMIT triggers driven by last traded price; verify tests for trigger conversion on cross and non-trigger when untraded.
 - [x] 4.4 Emit order lifecycle and trade-print events from the matching engine; verify an event-sequence test for a scripted set of orders.
-- [ ] 4.5 Benchmark matching throughput per instrument; verify the benchmark runs and its numbers are recorded in `docs/calibration.md`.
+- [x] 4.5 Benchmark matching throughput per instrument; verify the benchmark runs and its numbers are recorded in `docs/calibration.md`.
 
 ## 5. Market rules, sessions, and auctions
 

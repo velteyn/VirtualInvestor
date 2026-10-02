@@ -41,7 +41,29 @@ Interpretation:
 
 ## Matching throughput
 
-To be recorded once the matching engine lands (task 4.5).
+Run:
+
+```bash
+cd server && mvn -q -pl core compile && \
+  java -cp core/target/classes com.virtualinvestor.core.calibration.MatchingBenchmark
+```
+
+Configuration: 20 instruments, deep seeded book, 5,000,000 measured crossing limit orders
+(200,000 warmup), event emission included.
+
+Latest measured output (target machine, i5-5257U-class CPU):
+
+```
+instruments=20
+measuredOps=5000000
+elapsedMillis=774
+matchingOpsPerSecond=6459948
+matchingOpsPerSecondPerInstrument=322997
+```
+
+Interpretation: ~6.46M submissions/second aggregate, ~323k/second per instrument, including
+order-lifecycle and trade-print event construction. This is far above what a 10 Hz world with
+a handful of participants needs; the world clock, not matching, will be the limiting factor.
 
 ## Full-stack resource usage
 
