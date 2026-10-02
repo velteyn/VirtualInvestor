@@ -72,7 +72,7 @@
 - [x] 9.3 Implement periodic snapshot writing and a loader that rebuilds state from snapshot plus subsequent events; verify the golden-master hash after rebuild equals the live hash.
 - [x] 9.4 Implement read-model projections (leaderboard, portfolio, trade history, results) rebuildable from the log; verify a test that rebuilds projections from a log and matches live values.
 - [x] 9.5 Implement player reconnect with session token and full resync of orders, positions, account, and market snapshot; verify a test that reconnects and matches state.
-- [ ] 9.6 Implement server-restart recovery (load snapshot, replay, resume clock) and deliberate pause/resume; verify a test that stops and restarts mid-round with no lost or duplicated fills.
+- [x] 9.6 Implement server-restart recovery (load snapshot, replay, resume clock) and deliberate pause/resume; verify a test that stops and restarts mid-round with no lost or duplicated fills.
 - [ ] 9.7 Document the persistence model, snapshot cadence, and recovery procedures in `docs/persistence.md`; verify the documented recovery steps work in a local run.
 
 ## 10. Server edge and wire protocol
