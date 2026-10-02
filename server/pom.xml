@@ -15,6 +15,7 @@
     <module>core</module>
     <module>game</module>
     <module>persist</module>
+    <module>runtime</module>
     <module>edge</module>
   </modules>
 

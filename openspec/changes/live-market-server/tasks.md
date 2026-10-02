@@ -2,9 +2,9 @@
 
 ## 1. World runtime scaffolding
 
-- [ ] 1.1 Add a `runtime` package/module and a `RunningRound` composer that wires `WorldClock`, `InstrumentUniverse`, `FundamentalModel`, `VolatilityState`, per-instrument `InstrumentEngine`s, bots, `SessionStateMachine`, `MarginManager` and `Settlement`; verify a unit test constructs a running round from a seed + config.
-- [ ] 1.2 Add a single-producer command queue the loop drains at the top of each tick; verify a test that enqueues commands and observes them applied in order.
-- [ ] 1.3 Implement the fixed-step tick that advances fundamentals, volatility, news, bots, session phase and margin in a documented order; verify a test that a fixed seed advances deterministically.
+- [x] 1.1 Add a `runtime` package/module and a `RunningRound` composer that wires `WorldClock`, `InstrumentUniverse`, `FundamentalModel`, `VolatilityState`, per-instrument `InstrumentEngine`s, bots, `SessionStateMachine`, `MarginManager` and `Settlement`; verify a unit test constructs a running round from a seed + config.
+- [x] 1.2 Add a single-producer command queue the loop drains at the top of each tick; verify a test that enqueues commands and observes them applied in order.
+- [x] 1.3 Implement the fixed-step tick that advances fundamentals, volatility, news, bots, session phase and margin in a documented order; verify a test that a fixed seed advances deterministically.
 
 ## 2. Warm-up and session behavior
 
