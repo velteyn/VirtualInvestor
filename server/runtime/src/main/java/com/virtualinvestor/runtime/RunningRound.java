@@ -218,6 +218,25 @@ public final class RunningRound {
         commands.enqueue(command);
     }
 
+    /**
+     * Rebuild a round from a persisted event history (design D5), for restart recovery. The
+     * history is replayed through {@link #step()} from a fresh warm-up so prices, fills and
+     * accounts land where the original run left them. Only the tick count and running/paused
+     * state need reconstructing; the seed and config reproduce everything else.
+     *
+     * @param paused whether the round was paused when it stopped
+     */
+    public void recover(long recoveredTick, boolean paused) {
+        start();
+        while (clock.tick() < recoveredTick && !settled) {
+            step();
+        }
+        if (paused) {
+            clock.pause();
+            lifecycle.transitionTo(RoundState.PAUSED);
+        }
+    }
+
     /** Begin the round: enter warm-up, generate history and seed books, then run. */
     public void start() {
         lifecycle.transitionTo(RoundState.WARMUP);
@@ -501,6 +520,10 @@ public final class RunningRound {
 
     public long stepMillis() {
         return stepMillis;
+    }
+
+    public WorldClock clock() {
+        return clock;
     }
 
     public long tick() {

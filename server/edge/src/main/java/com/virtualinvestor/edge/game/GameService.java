@@ -32,11 +32,13 @@ public class GameService {
 
     private final InstrumentUniverse universe;
     private final SymbolSearch symbolSearch;
+    private final RoundRuntimeService runtime;
     private final Map<String, String> sessionTokens = new ConcurrentHashMap<>();
     private final Map<String, RoundView> rounds = new ConcurrentHashMap<>();
     private long roundCounter = 0L;
 
-    public GameService() {
+    public GameService(RoundRuntimeService runtime) {
+        this.runtime = runtime;
         this.universe = InstrumentUniverse.defaultUniverse();
         this.symbolSearch = new SymbolSearch(universe);
     }
@@ -71,7 +73,29 @@ public class GameService {
         RoundView view = new RoundView(roundId, seed, config, lifecycle, player, rivals, institutions,
                 startingCapitals, rawToken);
         rounds.put(roundId, view);
+        // Start the live world: warm-up, then the real-time loop streaming to subscribers.
+        runtime.start(roundId, seed, config, true);
         return view;
+    }
+
+    /** Pause or resume a running round. */
+    public void control(String roundId, String action) {
+        if (rounds.get(roundId) == null) {
+            throw new IllegalArgumentException("unknown round: " + roundId);
+        }
+        switch (action == null ? "" : action.toLowerCase(java.util.Locale.ROOT)) {
+            case "pause" -> runtime.pause(roundId);
+            case "resume" -> runtime.resume(roundId);
+            default -> throw new IllegalArgumentException("unknown control action: " + action);
+        }
+    }
+
+    /** Submit a client order command onto the running round. */
+    public void submit(String roundId, String participantId, com.virtualinvestor.edge.wire.WireMessage.Payload payload) {
+        long tick = runtime.round(roundId)
+                .map(com.virtualinvestor.runtime.RunningRound::tick)
+                .orElse(0L);
+        runtime.submit(roundId, participantId, payload, tick);
     }
 
     public Optional<RoundView> round(String roundId) {
@@ -82,6 +106,11 @@ public class GameService {
         RoundView view = rounds.get(roundId);
         if (view == null) {
             return List.of();
+        }
+        // Once the run is live, rank the actual participants by their current equity.
+        var live = runtime.round(roundId);
+        if (live.isPresent()) {
+            return Ranking.standings(live.get().participants(), live.get().marks(), view.startingCapitals());
         }
         List<Participant> everyone = new ArrayList<>();
         everyone.add(view.player());

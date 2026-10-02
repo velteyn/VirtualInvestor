@@ -75,6 +75,19 @@ public class RoundController {
         return game.leaderboard(request.roundId(), Map.of());
     }
 
+    @PostMapping(path = "/rounds/control", version = "1")
+    public ResponseEntity<Void> control(@RequestBody ControlRequest request) {
+        try {
+            game.control(request.roundId(), request.action());
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        }
+        return ResponseEntity.noContent().build();
+    }
+
+    public record ControlRequest(String roundId, String action) {
+    }
+
     public record SymbolSearchRequest(String query, int limit) {
     }
 

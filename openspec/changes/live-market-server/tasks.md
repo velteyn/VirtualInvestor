@@ -32,8 +32,8 @@
 
 ## 6. Lifecycle and recovery
 
-- [ ] 6.1 Wire round control: create starts warm-up + loop; pause/resume act on the running world; verify each end to end.
-- [ ] 6.2 On startup, recover a round from latest snapshot + events and resume paused or running; verify a simulated restart mid-round with no lost or duplicated fill.
+- [x] 6.1 Wire round control: create starts warm-up + loop; pause/resume act on the running world; verify each end to end.
+- [x] 6.2 On startup, recover a round from latest snapshot + events and resume paused or running; verify a simulated restart mid-round with no lost or duplicated fill.
 
 ## 7. Verification and docs
 
