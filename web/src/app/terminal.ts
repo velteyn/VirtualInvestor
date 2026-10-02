@@ -1,7 +1,7 @@
 /**
  * Mounts the `openalgo-charts` widget over our adapters. The library owns the
- * entire terminal (charts, DOM ladder, order ticket, positions, news); this
- * file only supplies the feeds and a symbol.
+ * entire terminal (charts, drawing rail, top bar, panels, order ticket); this
+ * file only supplies the feed, the symbol and the intervals.
  */
 import { createWidget } from 'openalgo-charts/widget';
 import type { RoundResponse, ServerClient } from '../adapters/serverClient';
@@ -18,32 +18,24 @@ export function mountTerminal(root: HTMLElement, client: ServerClient, round: Ro
   const tradeFeed = new VirtualInvestorTradeFeed(client);
   const newsFeed = new VirtualInvestorNewsFeed(client);
 
+  // The data feed is a creation-time option; passing it here is what makes the
+  // chart load bars. The top bar and rail are the terminal's menus.
   const widget = createWidget(root, {
+    feed: dataFeed,
     symbol: 'NVDO',
     exchange: 'VNDX',
     interval: '5m',
     intervals: ['1m', '5m', '15m', '1h', '1d'],
-    topbar: false,
+    topbar: true,
     statusline: true,
+    panels: true,
     persist: false,
   });
-
-  // The library's widget contract is resolved at runtime; the feed objects
-  // satisfy DataFeed/OrderFeed/NewsFeed structurally.
-  const host = widget as unknown as {
-    chart?: { setDataFeed?: (feed: unknown) => void };
-    setDataFeed?: (feed: unknown) => void;
-  };
-  if (typeof host.setDataFeed === 'function') {
-    host.setDataFeed(dataFeed);
-  } else if (host.chart && typeof host.chart.setDataFeed === 'function') {
-    host.chart.setDataFeed(dataFeed);
-  }
 
   const banner = document.createElement('div');
   banner.className = 'vi-session';
   banner.textContent = `Round ${round.roundId} · ${round.preset} · $${round.startingCapital.toLocaleString()} · ${round.durationMinutes}m`;
-  root.prepend(banner);
+  root.appendChild(banner);
 
   return {
     destroy() {
