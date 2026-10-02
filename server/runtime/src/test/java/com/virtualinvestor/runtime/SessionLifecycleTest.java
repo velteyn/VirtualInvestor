@@ -63,7 +63,7 @@ class SessionLifecycleTest {
         }
         assertEquals(SessionPhase.CONTINUOUS, round.session().phase());
 
-        double farBelow = round.fundamentals().fundamental("NVDO") * 0.5;
+        double farBelow = Math.round(round.fundamentals().fundamental("NVDO") * 0.5 * 100.0) / 100.0;
         round.enqueue(new Command.PlaceOrder("cmd-2", "human", "NVDO", OrderSide.BUY, OrderType.LIMIT, 10L, farBelow, 0.0, 0L));
         List<GameEvent> events = round.step();
 

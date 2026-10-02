@@ -14,10 +14,10 @@
 
 ## 3. Order intake
 
-- [ ] 3.1 Add client order-command messages to `WireMessage` and map them to core `Command`s at the edge; verify a codec/mapping test for place/modify/cancel.
-- [ ] 3.2 Validate and match commands through `TradeGateway`, returning explicit rejection reasons; verify tests for tick, quantity, short-sale, halt and price-band rejections.
-- [ ] 3.3 Enforce idempotency by client token; verify a repeated command creates one order.
-- [ ] 3.4 Apply every fill to both counterparties' `Account` before emitting events; verify an account/ledger test for a matched order.
+- [x] 3.1 Add client order-command messages to `WireMessage` and map them to core `Command`s at the edge; verify a codec/mapping test for place/modify/cancel.
+- [x] 3.2 Validate and match commands through `TradeGateway`, returning explicit rejection reasons; verify tests for tick, quantity, short-sale, halt and price-band rejections.
+- [x] 3.3 Enforce idempotency by client token; verify a repeated command creates one order.
+- [x] 3.4 Apply every fill to both counterparties' `Account` before emitting events; verify an account/ledger test for a matched order.
 
 ## 4. Persistence wiring
 

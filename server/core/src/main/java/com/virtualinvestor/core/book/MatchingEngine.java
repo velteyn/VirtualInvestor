@@ -37,7 +37,9 @@ public final class MatchingEngine {
             long makerQuantity = best.quantity();
             best.fill(quantity);
             long makerRemainingAfter = best.remaining();
-            fills.add(new Fill(best.id(), incoming.id(), best.price(), quantity, makerQuantity, makerRemainingAfter));
+            fills.add(new Fill(best.id(), best.participantId(), best.side(),
+                    incoming.id(), incoming.participantId(), incoming.side(),
+                    best.price(), quantity, makerQuantity, makerRemainingAfter));
             remaining -= quantity;
             if (makerRemainingAfter == 0L) {
                 book.removeOrder(best);

@@ -33,6 +33,11 @@ import com.virtualinvestor.core.participant.HumanParticipant;
 import com.virtualinvestor.core.participant.Participant;
 import com.virtualinvestor.core.participant.TradeGateway;
 import com.virtualinvestor.core.random.RandomStreams;
+import com.virtualinvestor.core.rules.CircuitBreaker;
+import com.virtualinvestor.core.rules.MarketRules;
+import com.virtualinvestor.core.rules.OrderValidator;
+import com.virtualinvestor.core.rules.ShortSalePolicy;
+import com.virtualinvestor.core.rules.ValidationResult;
 import com.virtualinvestor.core.session.SessionSchedule;
 import com.virtualinvestor.core.session.SessionStateMachine;
 import com.virtualinvestor.core.session.SessionTransition;
@@ -86,7 +91,11 @@ public final class RunningRound {
     private final List<BotRunner> runners;
     private final Map<String, Double> previousPrices;
     private final Map<String, Double> startingCapitals;
+    private final Map<String, MarketRules> marketRules = new LinkedHashMap<>();
+    private final Map<String, CircuitBreaker> breakers = new LinkedHashMap<>();
+    private final Map<String, ShortSalePolicy> shortPolicies = new LinkedHashMap<>();
     private final List<Consumer<List<GameEvent>>> listeners = new ArrayList<>();
+    private final java.util.Set<String> processedCommands = new java.util.LinkedHashSet<>();
 
     private WorldJournal journal = WorldJournal.noop();
     private boolean warmedUp;
@@ -121,6 +130,13 @@ public final class RunningRound {
         for (Instrument instrument : universe.all()) {
             engines.put(instrument.ticker(), new InstrumentEngine(instrument.ticker(), instrument.referencePrice()));
             previousPrices.put(instrument.ticker(), instrument.referencePrice());
+            marketRules.put(instrument.ticker(), MarketRules.forInstrument(instrument));
+            CircuitBreaker breaker = config.preset().newCircuitBreaker(instrument.referencePrice());
+            if (breaker != null) {
+                breakers.put(instrument.ticker(), breaker);
+            }
+            // Equities are shortable; the index is not.
+            shortPolicies.put(instrument.ticker(), config.preset().newShortSalePolicy(!instrument.isIndex()));
         }
 
         List<NewsItem> timeline = new NewsGenerator(universe, streams, RANDOM_NEWS_TICKS, 0.30)
@@ -166,17 +182,22 @@ public final class RunningRound {
         com.virtualinvestor.core.bot.MarketMakerStrategy maker =
                 new com.virtualinvestor.core.bot.MarketMakerStrategy(0.02, 2.0, 0.001, 500L);
         // Roster order: MARK, TIDE, LEDGER, BLITZ, VULTURE.
-        built.add(new BotRunner(rivals.get(0), null, maker, QUOTE_REFRESH_TICKS));
+        built.add(new BotRunner(rivals.get(0), null, maker, QUOTE_REFRESH_TICKS, tickFor("NVDO")));
         built.add(new BotRunner(rivals.get(1), new com.virtualinvestor.core.bot.MomentumStrategy(0.0005, 30L), null, 0L));
         built.add(new BotRunner(rivals.get(2), new com.virtualinvestor.core.bot.ValueStrategy(0.005, 30L), null, 0L));
         built.add(new BotRunner(rivals.get(3), new com.virtualinvestor.core.bot.ScalperStrategy(0.0005, 20L), null, 0L));
         built.add(new BotRunner(rivals.get(4), new com.virtualinvestor.core.bot.NewsHunterStrategy(0.01, 40L), null, 0L));
         // Institutions: ATLAS and CROWN provide liquidity; MERIDIAN trades macro news.
-        built.add(new BotRunner(institutions.get(0), null, maker, QUOTE_REFRESH_TICKS));
+        built.add(new BotRunner(institutions.get(0), null, maker, QUOTE_REFRESH_TICKS, tickFor("NVDO")));
         built.add(new BotRunner(institutions.get(1),
                 new com.virtualinvestor.core.bot.MacroReactionStrategy(0.01, 1_000L), null, 0L));
-        built.add(new BotRunner(institutions.get(2), null, maker, QUOTE_REFRESH_TICKS));
+        built.add(new BotRunner(institutions.get(2), null, maker, QUOTE_REFRESH_TICKS, tickFor("NVDO")));
         return List.copyOf(built);
+    }
+
+    /** The tick size for an instrument, used to snap market-maker quotes onto the grid. */
+    private double tickFor(String symbol) {
+        return universe.find(symbol).map(Instrument::tickSize).orElse(0.01);
     }
 
     public void setJournal(WorldJournal journal) {
@@ -196,7 +217,19 @@ public final class RunningRound {
         lifecycle.transitionTo(RoundState.WARMUP);
         if (!warmedUp) {
             history = warmup.generateHistory(universe, fundamentals, 60L, 60L, 1_700_000_000L);
-            warmup.seedBooks(engines.values(), fundamentals);
+            // Open each instrument at its warmed-up fundamental so books and circuit breakers
+            // start consistent with the market rather than at the stale reference price.
+            for (Instrument instrument : universe.all()) {
+                String symbol = instrument.ticker();
+                double open = fundamentals.fundamental(symbol);
+                engines.get(symbol).setLastPrice(open);
+                previousPrices.put(symbol, open);
+                CircuitBreaker breaker = breakers.get(symbol);
+                if (breaker != null) {
+                    breakers.put(symbol, config.preset().newCircuitBreaker(open));
+                }
+            }
+            warmup.seedBooks(engines.values(), fundamentals, rivals.get(0).id());
             warmedUp = true;
         }
         session.begin();
@@ -243,8 +276,16 @@ public final class RunningRound {
                 double change = priceChange(symbol, engine.lastPrice());
                 for (BotRunner runner : runners) {
                     long netPosition = runner.participant().account().position(symbol).netQty();
-                    events.addAll(runner.act(engine, fundamental, vol, change, netPosition, tick));
+                    events.addAll(runner.act(engine, fundamental, vol, change, netPosition, tick,
+                            fill -> applyFill(fill, symbol)));
                 }
+            }
+        }
+
+        for (Instrument instrument : universe.all()) {
+            CircuitBreaker breaker = breakers.get(instrument.ticker());
+            if (breaker != null) {
+                breaker.onPrice(engines.get(instrument.ticker()).lastPrice(), tick);
             }
         }
 
@@ -319,7 +360,25 @@ public final class RunningRound {
         clock.stop();
     }
 
+    /** Credit both counterparties of a fill before the event is published. */
+    private void applyFill(com.virtualinvestor.core.book.Fill fill, String symbol) {
+        participant(fill.takerParticipantId()).account()
+                .applyFill(symbol, fill.takerSide(), fill.quantity(), fill.price());
+        participant(fill.makerParticipantId()).account()
+                .applyFill(symbol, fill.makerSide(), fill.quantity(), fill.price());
+    }
+
+    private static List<GameEvent> rejected(Command.PlaceOrder place, String reason, long tick) {
+        return List.of(
+                new GameEvent.OrderAccepted(place.commandId(), place.participantId(), place.symbol(), tick),
+                new GameEvent.OrderRejected(place.commandId(), place.participantId(), place.symbol(), reason, tick));
+    }
+
     private List<GameEvent> applyCommand(Command command, long tick) {
+        // Idempotency: a retried command with the same id is applied at most once.
+        if (!processedCommands.add(command.commandId())) {
+            return List.of();
+        }
         if (command instanceof Command.PlaceOrder place) {
             SessionPhase phase = session.phase();
             if (phase == SessionPhase.OPENING_AUCTION || phase == SessionPhase.CLOSING_AUCTION) {
@@ -333,15 +392,31 @@ public final class RunningRound {
                 }
             }
             if (phase != SessionPhase.CONTINUOUS) {
-                return List.of(
-                        new GameEvent.OrderAccepted(place.commandId(), place.participantId(), place.symbol(), tick),
-                        new GameEvent.OrderRejected(place.commandId(), place.participantId(), place.symbol(),
-                                "market is not in continuous trading", tick));
+                return rejected(place, "market is not in continuous trading", tick);
+            }
+            CircuitBreaker breaker = breakers.get(place.symbol());
+            if (breaker != null && breaker.isHalted(tick)) {
+                return rejected(place, "instrument is halted", tick);
+            }
+            ValidationResult validation = OrderValidator.validate(
+                    marketRules.get(place.symbol()), place.side(), place.type(), place.price(), place.quantity());
+            if (!validation.valid()) {
+                return rejected(place, validation.reason(), tick);
+            }
+            long netPosition = participant(place.participantId()).account().position(place.symbol()).netQty();
+            ValidationResult shorting = shortPolicies.get(place.symbol())
+                    .check(place.side(), netPosition, place.quantity());
+            if (!shorting.valid()) {
+                return rejected(place, shorting.reason(), tick);
             }
             InstrumentEngine engine = engines.get(place.symbol());
-            return engine.submit(new IncomingOrder(
+            InstrumentEngine.SubmitResult result = engine.submitWithFills(new IncomingOrder(
                     place.commandId(), place.participantId(), place.symbol(), place.side(), place.type(),
                     place.quantity(), place.price()), tick);
+            for (com.virtualinvestor.core.book.Fill fill : result.fills()) {
+                applyFill(fill, place.symbol());
+            }
+            return result.events();
         }
         if (command instanceof Command.CancelOrder cancel) {
             for (InstrumentEngine engine : engines.values()) {
@@ -387,6 +462,18 @@ public final class RunningRound {
 
     public Map<String, List<Bar>> history() {
         return history;
+    }
+
+    public Map<String, CircuitBreaker> breakers() {
+        return breakers;
+    }
+
+    public Map<String, MarketRules> marketRules() {
+        return marketRules;
+    }
+
+    public Map<String, ShortSalePolicy> shortPolicies() {
+        return shortPolicies;
     }
 
     // ── accessors ──────────────────────────────────────────────────────────

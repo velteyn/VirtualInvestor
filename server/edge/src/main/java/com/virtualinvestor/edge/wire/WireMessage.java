@@ -27,10 +27,30 @@ public interface WireMessage {
             @JsonSubTypes.Type(value = LeaderboardEntryDto.class, name = "leaderboardEntry"),
             @JsonSubTypes.Type(value = SymbolDto.class, name = "symbol"),
             @JsonSubTypes.Type(value = RoundDto.class, name = "round"),
+            @JsonSubTypes.Type(value = PlaceOrderCommand.class, name = "placeOrder"),
+            @JsonSubTypes.Type(value = ModifyOrderCommand.class, name = "modifyOrder"),
+            @JsonSubTypes.Type(value = CancelOrderCommand.class, name = "cancelOrder"),
             @JsonSubTypes.Type(value = ServerHello.class, name = "hello"),
             @JsonSubTypes.Type(value = ErrorMessage.class, name = "error")
     })
     interface Payload {
+    }
+
+    /** A client request to place an order. */
+    @JsonTypeName("placeOrder")
+    record PlaceOrderCommand(String clientToken, String symbol, String side, String type, long quantity,
+                             double price, double triggerPrice) implements WireMessage.Payload {
+    }
+
+    /** A client request to modify a working order. */
+    @JsonTypeName("modifyOrder")
+    record ModifyOrderCommand(String clientToken, String orderId, double price, double triggerPrice)
+            implements WireMessage.Payload {
+    }
+
+    /** A client request to cancel a working order. */
+    @JsonTypeName("cancelOrder")
+    record CancelOrderCommand(String clientToken, String orderId) implements WireMessage.Payload {
     }
 
     /** Sent on connect so the client learns the protocol version. */

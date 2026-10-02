@@ -85,13 +85,27 @@ public final class WarmupGenerator {
 
     /** Rest a two-sided quote from the market maker so the book is non-empty at the open. */
     public void seedBooks(Collection<InstrumentEngine> engines, FundamentalModel model) {
+        seedBooks(engines, model, "MARK");
+    }
+
+    /** As above, but the resting quotes belong to the given participant (so fills credit it). */
+    public void seedBooks(Collection<InstrumentEngine> engines, FundamentalModel model, String participantId) {
         for (InstrumentEngine engine : engines) {
             double fundamental = model.fundamental(engine.symbol());
             Quote quote = maker.quote(fundamental, 0.0, 0L);
-            engine.rest(new RestingOrder("warm-bid-" + engine.symbol(), "MARK", engine.symbol(),
-                    OrderSide.BUY, quote.bidPrice(), quote.bidSize()));
-            engine.rest(new RestingOrder("warm-ask-" + engine.symbol(), "MARK", engine.symbol(),
-                    OrderSide.SELL, quote.askPrice(), quote.askSize()));
+            double tick = tickFor(engine.symbol());
+            engine.rest(new RestingOrder("warm-bid-" + engine.symbol(), participantId, engine.symbol(),
+                    OrderSide.BUY, snap(quote.bidPrice(), tick), quote.bidSize()));
+            engine.rest(new RestingOrder("warm-ask-" + engine.symbol(), participantId, engine.symbol(),
+                    OrderSide.SELL, snap(quote.askPrice(), tick), quote.askSize()));
         }
+    }
+
+    private static double snap(double price, double tick) {
+        return Math.round(price / tick) * tick;
+    }
+
+    private double tickFor(String symbol) {
+        return InstrumentUniverse.defaultUniverse().find(symbol).map(Instrument::tickSize).orElse(0.01);
     }
 }

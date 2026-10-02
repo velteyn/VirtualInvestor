@@ -57,20 +57,40 @@ public final class InstrumentEngine {
         return stops;
     }
 
-    /** Submit an order and return every event it produced, in order. */
+    /** The events and executions of one submission, including any stop-triggered children. */
+    public record SubmitResult(List<GameEvent> events, List<Fill> fills) {
+        public SubmitResult {
+            events = List.copyOf(events);
+            fills = List.copyOf(fills);
+        }
+    }
+
+    /** Submit and return only the events (executions are dropped). */
     public List<GameEvent> submit(IncomingOrder order, long tick) {
+        return submitWithFills(order, tick).events();
+    }
+
+    /** Submit and return both the events and every execution, so callers can apply fills. */
+    public SubmitResult submitWithFills(IncomingOrder order, long tick) {
         List<GameEvent> events = new ArrayList<>();
+        List<Fill> fills = new ArrayList<>();
+        submitInto(order, tick, events, fills);
+        return new SubmitResult(events, fills);
+    }
+
+    private void submitInto(IncomingOrder order, long tick, List<GameEvent> events, List<Fill> fills) {
         events.add(new GameEvent.OrderAccepted(order.id(), order.participantId(), order.symbol(), tick));
 
         MatchResult result = matcher.match(book, order);
         if (result.rejected()) {
             events.add(new GameEvent.OrderRejected(
                     order.id(), order.participantId(), order.symbol(), result.rejection(), tick));
-            return List.copyOf(events);
+            return;
         }
 
         for (Fill fill : result.fills()) {
             lastPrice = fill.price();
+            fills.add(fill);
             events.add(new GameEvent.TradePrinted(symbol, fill.price(), fill.quantity(), order.side(), tick));
             if (fill.makerRemainingAfter() == 0L) {
                 events.add(new GameEvent.OrderFilled(
@@ -96,15 +116,10 @@ public final class InstrumentEngine {
         }
 
         if (filled > 0L || result.rested()) {
-            emitTriggeredStops(tick, events);
-        }
-        return List.copyOf(events);
-    }
-
-    private void emitTriggeredStops(long tick, List<GameEvent> events) {
-        for (IncomingOrder triggered : stops.onLastTradedPrice(lastPrice)) {
-            events.add(new GameEvent.OrderTriggered(triggered.id(), symbol, lastPrice, tick));
-            events.addAll(submit(triggered, tick));
+            for (IncomingOrder triggered : stops.onLastTradedPrice(lastPrice)) {
+                events.add(new GameEvent.OrderTriggered(triggered.id(), symbol, lastPrice, tick));
+                submitInto(triggered, tick, events, fills);
+            }
         }
     }
 
