@@ -62,7 +62,7 @@
 - [x] 8.2 Implement round lifecycle states (created, warm-up, running, closing, settled) with `seed + config` identity; verify a lifecycle test asserts allowed transitions only.
 - [x] 8.3 Implement the warm-up phase that generates history and pre-seeds books before trading; verify a test that bars exist and the book is non-empty on session open.
 - [x] 8.4 Implement ranking by final equity with return-on-capital as a secondary figure, seeding rivals with the player's capital; verify a test that unequal capital inputs still rank rivals fairly.
-- [ ] 8.5 Implement margin call detection, liquidation, and settlement (mark to close, force-close margin positions, finalize ranking); verify tests for a mid-session liquidation and an end-of-session settlement.
+- [x] 8.5 Implement margin call detection, liquidation, and settlement (mark to close, force-close margin positions, finalize ranking); verify tests for a mid-session liquidation and an end-of-session settlement.
 - [ ] 8.6 Document the round lifecycle and settlement rules in `docs/game-session.md`; verify the document matches the implemented states and rules.
 
 ## 9. Persistence, recovery, and resume
