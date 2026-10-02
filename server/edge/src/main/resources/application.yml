@@ -1,0 +1,14 @@
+spring:
+  application:
+    name: virtualinvestor-edge
+  # Spring MVC API versioning (Spring Framework 7 / Boot 4). Versions ride on the X-API-Version
+  # header, so the URL stays stable as the protocol evolves.
+  mvc:
+    apiversion:
+      required: true
+      use:
+        header: X-API-Version
+      default-version: 1
+
+server:
+  port: 8080
