@@ -67,7 +67,7 @@
 
 ## 9. Persistence, recovery, and resume
 
-- [ ] 9.1 Add Flyway migrations for `events`, `snapshots`, `rounds`, `participants`, `accounts`, `positions`, `orders`, `fills`, and `results`; verify migrations apply cleanly to an empty database.
+- [x] 9.1 Add Flyway migrations for `events`, `snapshots`, `rounds`, `participants`, `accounts`, `positions`, `orders`, `fills`, and `results`; verify migrations apply cleanly to an empty database.
 - [ ] 9.2 Implement the append-only event log writer with monotonic sequence and tick, batched off the hot path; verify a test asserting ordering and that no existing row is ever updated or deleted.
 - [ ] 9.3 Implement periodic snapshot writing and a loader that rebuilds state from snapshot plus subsequent events; verify the golden-master hash after rebuild equals the live hash.
 - [ ] 9.4 Implement read-model projections (leaderboard, portfolio, trade history, results) rebuildable from the log; verify a test that rebuilds projections from a log and matches live values.
