@@ -46,7 +46,7 @@
 - [x] 6.3 Implement the market-maker strategy quoting around fundamentals with inventory skew; verify a test that spreads widen as volatility rises and inventory skews quotes.
 - [x] 6.4 Implement momentum, value, scalper, and news-hunter rival strategies; verify a scripted-news test where each rival reacts in its declared direction.
 - [x] 6.5 Implement institution strategies (VWAP execution and macro reaction) and exclude them from ranking; verify a test that institution fills move price and that institutions are absent from the leaderboard projection.
-- [ ] 6.6 Document the bot roster, their identities, and strategies in `docs/bots.md`; verify the document lists all five rivals and the institutions.
+- [x] 6.6 Document the bot roster, their identities, and strategies in `docs/bots.md`; verify the document lists all five rivals and the institutions.
 
 ## 7. News engine
 
