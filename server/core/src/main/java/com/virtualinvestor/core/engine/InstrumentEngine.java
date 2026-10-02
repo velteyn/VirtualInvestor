@@ -7,6 +7,7 @@ import com.virtualinvestor.core.book.MatchingEngine;
 import com.virtualinvestor.core.book.OrderBook;
 import com.virtualinvestor.core.book.RestingOrder;
 import com.virtualinvestor.core.book.StopBook;
+import com.virtualinvestor.core.book.StopOrder;
 import com.virtualinvestor.core.domain.OrderType;
 import com.virtualinvestor.core.event.GameEvent;
 import java.util.ArrayList;
@@ -100,6 +101,19 @@ public final class InstrumentEngine {
             events.add(new GameEvent.OrderTriggered(triggered.id(), symbol, lastPrice, tick));
             events.addAll(submit(triggered, tick));
         }
+    }
+
+    /** Cancel a working or untriggered order and return the resulting event, if any. */
+    public List<GameEvent> cancel(String orderId, long tick) {
+        RestingOrder resting = book.cancel(orderId);
+        if (resting != null) {
+            return List.of(new GameEvent.OrderCancelled(orderId, symbol, "user", tick));
+        }
+        StopOrder stop = stops.cancel(orderId);
+        if (stop != null) {
+            return List.of(new GameEvent.OrderCancelled(orderId, symbol, "user", tick));
+        }
+        return List.of();
     }
 
     /** Rest a plain order directly (used to seed a book in tests). */
