@@ -77,7 +77,7 @@
 
 ## 10. Server edge and wire protocol
 
-- [ ] 10.1 Define the versioned wire schema for market data, orders, accounts, news, and round control; verify a contract test serializes every message type.
+- [x] 10.1 Define the versioned wire schema for market data, orders, accounts, news, and round control; verify a contract test serializes every message type.
 - [ ] 10.2 Implement REST endpoints for symbol search, round create/configure, leaderboard, history, and auth; verify an integration test using an HTTP client.
 - [ ] 10.3 Implement the WebSocket gateway streaming L1/L2, trades, order/account events, and news with coalesced depth updates; verify a test client receives each stream type.
 - [ ] 10.4 Map engine commands/events to wire messages at the edge without leaking `core` types; verify an architecture test that `edge` depends on `core` and not the reverse.

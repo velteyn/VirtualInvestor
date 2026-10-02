@@ -1,0 +1,109 @@
+package com.virtualinvestor.edge.wire;
+
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.annotation.JsonTypeName;
+import java.util.List;
+
+/**
+ * The versioned wire protocol (design D7). One envelope type carries every message the client
+ * and server exchange; each message is a record. The `type` discriminator is stable and the
+ * whole set is versioned by {@link #PROTOCOL_VERSION}. Field names are camelCase and machine-
+ * generated; the Java core's record shapes are NOT the wire contract.
+ */
+public interface WireMessage {
+
+    String PROTOCOL_VERSION = "1";
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "type")
+    @JsonSubTypes({
+            @JsonSubTypes.Type(value = BarDto.class, name = "bar"),
+            @JsonSubTypes.Type(value = DepthDto.class, name = "depth"),
+            @JsonSubTypes.Type(value = TradeDto.class, name = "trade"),
+            @JsonSubTypes.Type(value = OrderDto.class, name = "order"),
+            @JsonSubTypes.Type(value = PositionDto.class, name = "position"),
+            @JsonSubTypes.Type(value = AccountDto.class, name = "account"),
+            @JsonSubTypes.Type(value = NewsDto.class, name = "news"),
+            @JsonSubTypes.Type(value = LeaderboardEntryDto.class, name = "leaderboardEntry"),
+            @JsonSubTypes.Type(value = SymbolDto.class, name = "symbol"),
+            @JsonSubTypes.Type(value = RoundDto.class, name = "round"),
+            @JsonSubTypes.Type(value = ServerHello.class, name = "hello"),
+            @JsonSubTypes.Type(value = ErrorMessage.class, name = "error")
+    })
+    interface Payload {
+    }
+
+    /** Sent on connect so the client learns the protocol version. */
+    @JsonTypeName("hello")
+    record ServerHello(String protocolVersion) implements WireMessage.Payload {
+        public ServerHello() {
+            this(PROTOCOL_VERSION);
+        }
+    }
+
+    @JsonTypeName("error")
+    record ErrorMessage(String code, String message) implements WireMessage.Payload {
+    }
+
+    @JsonTypeName("bar")
+    record BarDto(String symbol, String interval, long time, double open, double high, double low, double close,
+                  long volume) implements WireMessage.Payload {
+    }
+
+    @JsonTypeName("depth")
+    record DepthDto(String symbol, List<Level> bids, List<Level> asks, double ltp, long tick)
+            implements WireMessage.Payload {
+        public record Level(double price, long qty) {
+        }
+    }
+
+    @JsonTypeName("trade")
+    record TradeDto(String symbol, double price, long quantity, String aggressor, long tick)
+            implements WireMessage.Payload {
+    }
+
+    @JsonTypeName("order")
+    record OrderDto(String orderId, String participantId, String symbol, String side, String type, long quantity,
+                    double price, double triggerPrice, String status, long filledQty, long tick)
+            implements WireMessage.Payload {
+    }
+
+    @JsonTypeName("position")
+    record PositionDto(String participantId, String symbol, long netQty, double avgPrice)
+            implements WireMessage.Payload {
+    }
+
+    @JsonTypeName("account")
+    record AccountDto(String participantId, double cash, double realizedPnl)
+            implements WireMessage.Payload {
+    }
+
+    @JsonTypeName("news")
+    record NewsDto(String newsId, String source, String scope, String symbol, String sector, String headline,
+                   String body, double signedMagnitude, long durationTicks, String stage, long tick)
+            implements WireMessage.Payload {
+    }
+
+    @JsonTypeName("leaderboardEntry")
+    record LeaderboardEntryDto(int rank, String participantId, String displayName, double equity,
+                               double startingCapital, double returnFraction)
+            implements WireMessage.Payload {
+    }
+
+    @JsonTypeName("symbol")
+    record SymbolDto(String ticker, String name, String sector, String assetClass) implements WireMessage.Payload {
+    }
+
+    @JsonTypeName("round")
+    record RoundDto(String roundId, long seed, double startingCapital, long durationMinutes, String preset,
+                    String state, String sessionToken) implements WireMessage.Payload {
+    }
+
+    /** A client request envelope: a request id plus a command-style payload. */
+    record Request(String requestId, String type, Payload payload) {
+    }
+
+    /** A server event envelope: an optional sequence position plus a payload. */
+    record Event(long seq, long tick, String type, Payload payload) {
+    }
+}
