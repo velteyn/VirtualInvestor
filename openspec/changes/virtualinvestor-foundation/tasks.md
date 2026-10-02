@@ -73,7 +73,7 @@
 - [x] 9.4 Implement read-model projections (leaderboard, portfolio, trade history, results) rebuildable from the log; verify a test that rebuilds projections from a log and matches live values.
 - [x] 9.5 Implement player reconnect with session token and full resync of orders, positions, account, and market snapshot; verify a test that reconnects and matches state.
 - [x] 9.6 Implement server-restart recovery (load snapshot, replay, resume clock) and deliberate pause/resume; verify a test that stops and restarts mid-round with no lost or duplicated fills.
-- [ ] 9.7 Document the persistence model, snapshot cadence, and recovery procedures in `docs/persistence.md`; verify the documented recovery steps work in a local run.
+- [x] 9.7 Document the persistence model, snapshot cadence, and recovery procedures in `docs/persistence.md`; verify the documented recovery steps work in a local run.
 
 ## 10. Server edge and wire protocol
 
