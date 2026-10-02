@@ -94,8 +94,8 @@
 
 ## 12. Integration and end-to-end checks
 
-- [ ] 12.1 Run a full 30-minute bot-only round via the backend and verify prices move, books update, news fires, and the round settles with a finalized leaderboard.
-- [ ] 12.2 Run a full session with a human player trading against the five rivals through the terminal and verify orders, fills, P&L, settlement, and ranking behave correctly.
-- [ ] 12.3 Verify restart recovery end to end: stop the server mid-session, restart, and confirm the world resumes to the same state.
-- [ ] 12.4 Verify pause/resume end to end: pause a session, resume later, and confirm accounts, positions, pending orders, and clock continue exactly.
-- [ ] 12.5 Perform a full-stack resource check on the target machine (Java, Postgres, terminal) and record observed CPU and memory in `docs/calibration.md`.
+- [x] 12.1 Run a full 30-minute bot-only round via the backend and verify prices move, books update, news fires, and the round settles with a finalized leaderboard.
+- [x] 12.2 Run a full session with a human player trading against the five rivals through the terminal and verify orders, fills, P&L, settlement, and ranking behave correctly.
+- [x] 12.3 Verify restart recovery end to end: stop the server mid-session, restart, and confirm the world resumes to the same state.
+- [x] 12.4 Verify pause/resume end to end: pause a session, resume later, and confirm accounts, positions, pending orders, and clock continue exactly.
+- [x] 12.5 Perform a full-stack resource check on the target machine (Java, Postgres, terminal) and record observed CPU and memory in `docs/calibration.md`.
