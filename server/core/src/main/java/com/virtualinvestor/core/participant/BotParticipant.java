@@ -14,7 +14,7 @@ public final class BotParticipant implements Participant {
     private final ParticipantType type;
     private final Account account;
 
-    public BotParticipant(String id, String displayName, ParticipantType type, long openingCash) {
+    public BotParticipant(String id, String displayName, ParticipantType type, double openingCash) {
         this.id = Objects.requireNonNull(id, "id");
         this.displayName = Objects.requireNonNull(displayName, "displayName");
         if (type == ParticipantType.HUMAN) {

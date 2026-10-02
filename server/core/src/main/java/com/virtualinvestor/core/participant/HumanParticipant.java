@@ -9,7 +9,7 @@ public final class HumanParticipant implements Participant {
     private final String displayName;
     private final Account account;
 
-    public HumanParticipant(String id, String displayName, long openingCash) {
+    public HumanParticipant(String id, String displayName, double openingCash) {
         this.id = Objects.requireNonNull(id, "id");
         this.displayName = Objects.requireNonNull(displayName, "displayName");
         this.account = new Account(id, openingCash);
