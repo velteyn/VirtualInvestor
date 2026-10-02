@@ -37,7 +37,7 @@
 - [x] 5.2 Implement short-sale availability and price bands/circuit breakers with halt and resume; verify tests for a halted instrument refusing orders and resuming after the period.
 - [x] 5.3 Implement the intraday session state machine (pre-open, opening auction, continuous, closing auction) over the world clock; verify a timeline test asserts phase transitions at the right ticks.
 - [x] 5.4 Implement opening and closing auctions that compute the volume-maximizing clearing price; verify tests for a known book producing the expected open and close.
-- [ ] 5.5 Document the market rules and their per-preset toggles in `docs/market-rules.md`; verify the document matches the implemented rule set.
+- [x] 5.5 Document the market rules and their per-preset toggles in `docs/market-rules.md`; verify the document matches the implemented rule set.
 
 ## 6. Participants, bots, and institutions
 
