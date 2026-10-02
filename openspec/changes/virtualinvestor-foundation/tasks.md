@@ -50,7 +50,7 @@
 
 ## 7. News engine
 
-- [ ] 7.1 Define the news model (source, headline, body, scope, direction, magnitude, duration) with fictional sources; verify a validation test rejects real-source names.
+- [x] 7.1 Define the news model (source, headline, body, scope, direction, magnitude, duration) with fictional sources; verify a validation test rejects real-source names.
 - [ ] 7.2 Implement scheduled and random event generation seeded per round, with cadence scaled to session length; verify a same-seed test produces identical event times.
 - [ ] 7.3 Implement rumor-then-confirm/deny staging with market reaction at rumor time; verify a test showing a price move at rumor and a further move at confirmation/denial.
 - [ ] 7.4 Wire news impact to fundamentals and the volatility state; verify a test showing higher realized volatility and wider spreads after a significant event.
