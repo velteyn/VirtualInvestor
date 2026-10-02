@@ -85,12 +85,12 @@
 
 ## 11. Terminal adapters and launch pad UI
 
-- [ ] 11.1 Implement the `DataFeed` adapter (bars, depth, symbol search) against REST+WS; verify against a running server with the `openalgo-charts` reference-host patterns.
-- [ ] 11.2 Implement the `OrderFeed`/`AccountFeed` adapter (place/modify/cancel, streams, accounts) and map server rejects to engine states; verify a test that places, modifies, cancels, and reconciles a position.
-- [ ] 11.3 Implement the `NewsFeed` adapter and wire it to the terminal news panel; verify headlines appear in the panel as events fire.
-- [ ] 11.4 Build the launch pad screen (capital, duration, preset) that creates a round and opens the terminal; verify the documented manual flow starts a session.
-- [ ] 11.5 Mount the `openalgo-charts` widget with our adapters and confirm chart, DOM ladder, order ticket, positions, and leaderboard render live data; verify via the app's manual run and a smoke test.
-- [ ] 11.6 Document the terminal setup and adapter contract in `docs/terminal.md`; verify the documented dev commands reproduce the terminal.
+- [x] 11.1 Implement the `DataFeed` adapter (bars, depth, symbol search) against REST+WS; verify against a running server with the `openalgo-charts` reference-host patterns.
+- [x] 11.2 Implement the `OrderFeed`/`AccountFeed` adapter (place/modify/cancel, streams, accounts) and map server rejects to engine states; verify a test that places, modifies, cancels, and reconciles a position.
+- [x] 11.3 Implement the `NewsFeed` adapter and wire it to the terminal news panel; verify headlines appear in the panel as events fire.
+- [x] 11.4 Build the launch pad screen (capital, duration, preset) that creates a round and opens the terminal; verify the documented manual flow starts a session.
+- [x] 11.5 Mount the `openalgo-charts` widget with our adapters and confirm chart, DOM ladder, order ticket, positions, and leaderboard render live data; verify via the app's manual run and a smoke test.
+- [x] 11.6 Document the terminal setup and adapter contract in `docs/terminal.md`; verify the documented dev commands reproduce the terminal.
 
 ## 12. Integration and end-to-end checks
 
