@@ -44,6 +44,11 @@ public final class InstrumentEngine {
         return lastPrice;
     }
 
+    /** Establish the price from a call auction (opening/closing). */
+    public void setLastPrice(double price) {
+        this.lastPrice = price;
+    }
+
     public OrderBook book() {
         return book;
     }

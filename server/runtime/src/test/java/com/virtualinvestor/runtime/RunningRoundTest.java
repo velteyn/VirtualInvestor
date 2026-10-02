@@ -17,12 +17,15 @@ import org.junit.jupiter.api.Test;
 
 class RunningRoundTest {
 
+    private static final long MINUTE_MILLIS = 60_000L;
+
     private static LaunchConfig config() {
-        return new LaunchConfig(100_000.0, 30L, RealismPreset.REALISTIC);
+        return new LaunchConfig(100_000.0, 60L, RealismPreset.REALISTIC);
     }
 
     private static RunningRound round(long seed) {
-        return new RunningRound("round-test", seed, config());
+        // A 1-minute step gives a 60-tick session, so continuous trading starts at tick 4.
+        return new RunningRound("round-test", seed, config(), MINUTE_MILLIS);
     }
 
     @Test
@@ -62,14 +65,14 @@ class RunningRoundTest {
 
     @Test
     void sameSeedProducesIdenticalEventStream() {
-        List<GameEvent> first = run(99L, 150);
-        List<GameEvent> second = run(99L, 150);
+        List<GameEvent> first = run(99L, 30);
+        List<GameEvent> second = run(99L, 30);
         assertEquals(first, second);
     }
 
     @Test
     void differentSeedsDiverge() {
-        assertNotEquals(run(1L, 100), run(2L, 100));
+        assertNotEquals(run(1L, 30), run(2L, 30));
     }
 
     private static List<GameEvent> run(long seed, int ticks) {

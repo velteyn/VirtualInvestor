@@ -1,14 +1,14 @@
 package com.virtualinvestor.runtime;
 
-import com.virtualinvestor.core.bot.MacroReactionStrategy;
-import com.virtualinvestor.core.bot.MarketMakerStrategy;
-import com.virtualinvestor.core.bot.MomentumStrategy;
-import com.virtualinvestor.core.bot.NewsHunterStrategy;
-import com.virtualinvestor.core.bot.ScalperStrategy;
-import com.virtualinvestor.core.bot.ValueStrategy;
+import com.virtualinvestor.core.auction.Auction;
+import com.virtualinvestor.core.auction.AuctionFill;
+import com.virtualinvestor.core.auction.AuctionOrder;
+import com.virtualinvestor.core.auction.AuctionResult;
+import com.virtualinvestor.core.book.IncomingOrder;
 import com.virtualinvestor.core.clock.TimeSource;
 import com.virtualinvestor.core.clock.WorldClock;
 import com.virtualinvestor.core.command.Command;
+import com.virtualinvestor.core.domain.OrderType;
 import com.virtualinvestor.core.domain.RoundState;
 import com.virtualinvestor.core.domain.SessionPhase;
 import com.virtualinvestor.core.engine.InstrumentEngine;
@@ -19,9 +19,11 @@ import com.virtualinvestor.core.game.LaunchConfig;
 import com.virtualinvestor.core.game.MarginManager;
 import com.virtualinvestor.core.game.RivalRoster;
 import com.virtualinvestor.core.game.RoundLifecycle;
+import com.virtualinvestor.core.game.Settlement;
 import com.virtualinvestor.core.game.WarmupGenerator;
 import com.virtualinvestor.core.instrument.Instrument;
 import com.virtualinvestor.core.instrument.InstrumentUniverse;
+import com.virtualinvestor.core.market.Bar;
 import com.virtualinvestor.core.news.NewsEngine;
 import com.virtualinvestor.core.news.NewsGenerator;
 import com.virtualinvestor.core.news.NewsItem;
@@ -43,25 +45,27 @@ import java.util.function.Consumer;
 
 /**
  * The running round (design D1): composes the framework-free core into one deterministic world.
- * It owns the clock, the fundamental/news/bot simulation, the session and margin rules, the
- * participant roster and the trade gateway, drains client commands at the top of each tick, and
- * publishes the events it produces to listeners and the durable journal.
+ * It owns the clock, the fundamental/news/bot simulation, the session, auctions and margin
+ * rules, the participant roster and the trade gateway, drains client commands at the top of
+ * each tick, and publishes the events it produces to listeners and the durable journal.
  *
  * <p>Single-writer: {@link #step()} runs on one thread; {@link #enqueue(Command)} is the only
  * cross-thread entry.
  */
 public final class RunningRound {
 
-    private static final long STEP_MILLIS = 100L;
+    public static final long DEFAULT_STEP_MILLIS = 100L;
     private static final long YEAR_MILLIS = 5_896_800_000L;
     private static final double MARKET_ANNUAL_VOL = 0.30;
     private static final double SECTOR_ANNUAL_VOL = 0.20;
     private static final double VOLATILITY_DECAY = 0.99;
     private static final long QUOTE_REFRESH_TICKS = 50L;
+    private static final long RANDOM_NEWS_TICKS = 1500L;
 
     private final String roundId;
     private final long seed;
     private final LaunchConfig config;
+    private final long stepMillis;
     private final InstrumentUniverse universe;
     private final WorldClock clock;
     private final FundamentalModel fundamentals;
@@ -81,22 +85,34 @@ public final class RunningRound {
     private final List<Participant> participants;
     private final List<BotRunner> runners;
     private final Map<String, Double> previousPrices;
+    private final Map<String, Double> startingCapitals;
     private final List<Consumer<List<GameEvent>>> listeners = new ArrayList<>();
 
     private WorldJournal journal = WorldJournal.noop();
     private boolean warmedUp;
+    private Map<String, List<Bar>> history = Map.of();
+    private Map<String, Auction> activeAuctions = new LinkedHashMap<>();
+    private boolean settled;
 
     public RunningRound(String roundId, long seed, LaunchConfig config) {
+        this(roundId, seed, config, DEFAULT_STEP_MILLIS);
+    }
+
+    public RunningRound(String roundId, long seed, LaunchConfig config, long stepMillis) {
         this.roundId = Objects.requireNonNull(roundId, "roundId");
         this.seed = seed;
         this.config = Objects.requireNonNull(config, "config");
+        if (stepMillis <= 0L) {
+            throw new IllegalArgumentException("stepMillis must be positive");
+        }
+        this.stepMillis = stepMillis;
 
-        long durationTicks = config.durationTicks(STEP_MILLIS);
-        this.clock = new WorldClock(STEP_MILLIS, TimeSource.system());
+        long durationTicks = config.durationTicks(stepMillis);
         this.universe = InstrumentUniverse.defaultUniverse();
+        this.clock = new WorldClock(stepMillis, TimeSource.system());
         RandomStreams streams = new RandomStreams(seed);
         this.fundamentals = new FundamentalModel(
-                universe, streams, MARKET_ANNUAL_VOL, SECTOR_ANNUAL_VOL, STEP_MILLIS, YEAR_MILLIS);
+                universe, streams, MARKET_ANNUAL_VOL, SECTOR_ANNUAL_VOL, stepMillis, YEAR_MILLIS);
         this.volatility = new VolatilityState(VOLATILITY_DECAY);
         fundamentals.setVolatilityState(volatility);
 
@@ -107,7 +123,8 @@ public final class RunningRound {
             previousPrices.put(instrument.ticker(), instrument.referencePrice());
         }
 
-        List<NewsItem> timeline = new NewsGenerator(universe, streams, 1500L, 0.30).generate(0L, durationTicks);
+        List<NewsItem> timeline = new NewsGenerator(universe, streams, RANDOM_NEWS_TICKS, 0.30)
+                .generate(0L, durationTicks);
         List<PlannedNews> planned = new ArrayList<>(timeline.size());
         for (int i = 0; i < timeline.size(); i++) {
             NewsItem item = timeline.get(i);
@@ -121,7 +138,7 @@ public final class RunningRound {
         this.margin = new MarginManager(config.preset().maintenanceMarginFraction());
         this.lifecycle = new RoundLifecycle(roundId, seed, config);
         this.warmup = new WarmupGenerator(
-                new MarketMakerStrategy(0.02, 2.0, 0.001, 500L), STEP_MILLIS, 1_000_000.0);
+                new com.virtualinvestor.core.bot.MarketMakerStrategy(0.02, 2.0, 0.001, 500L), stepMillis, 1_000_000.0);
         this.gateway = new TradeGateway();
         for (InstrumentEngine engine : engines.values()) {
             gateway.register(engine);
@@ -136,21 +153,28 @@ public final class RunningRound {
         participants.addAll(rivals);
         participants.addAll(institutions);
 
+        this.startingCapitals = new LinkedHashMap<>();
+        for (Participant participant : participants) {
+            startingCapitals.put(participant.id(), config.startingCapital());
+        }
+
         this.runners = buildRunners();
     }
 
     private List<BotRunner> buildRunners() {
         List<BotRunner> built = new ArrayList<>();
-        MarketMakerStrategy maker = new MarketMakerStrategy(0.02, 2.0, 0.001, 500L);
+        com.virtualinvestor.core.bot.MarketMakerStrategy maker =
+                new com.virtualinvestor.core.bot.MarketMakerStrategy(0.02, 2.0, 0.001, 500L);
         // Roster order: MARK, TIDE, LEDGER, BLITZ, VULTURE.
         built.add(new BotRunner(rivals.get(0), null, maker, QUOTE_REFRESH_TICKS));
-        built.add(new BotRunner(rivals.get(1), new MomentumStrategy(0.0005, 30L), null, 0L));
-        built.add(new BotRunner(rivals.get(2), new ValueStrategy(0.005, 30L), null, 0L));
-        built.add(new BotRunner(rivals.get(3), new ScalperStrategy(0.0005, 20L), null, 0L));
-        built.add(new BotRunner(rivals.get(4), new NewsHunterStrategy(0.01, 40L), null, 0L));
+        built.add(new BotRunner(rivals.get(1), new com.virtualinvestor.core.bot.MomentumStrategy(0.0005, 30L), null, 0L));
+        built.add(new BotRunner(rivals.get(2), new com.virtualinvestor.core.bot.ValueStrategy(0.005, 30L), null, 0L));
+        built.add(new BotRunner(rivals.get(3), new com.virtualinvestor.core.bot.ScalperStrategy(0.0005, 20L), null, 0L));
+        built.add(new BotRunner(rivals.get(4), new com.virtualinvestor.core.bot.NewsHunterStrategy(0.01, 40L), null, 0L));
         // Institutions: ATLAS and CROWN provide liquidity; MERIDIAN trades macro news.
         built.add(new BotRunner(institutions.get(0), null, maker, QUOTE_REFRESH_TICKS));
-        built.add(new BotRunner(institutions.get(1), new MacroReactionStrategy(0.01, 1_000L), null, 0L));
+        built.add(new BotRunner(institutions.get(1),
+                new com.virtualinvestor.core.bot.MacroReactionStrategy(0.01, 1_000L), null, 0L));
         built.add(new BotRunner(institutions.get(2), null, maker, QUOTE_REFRESH_TICKS));
         return List.copyOf(built);
     }
@@ -171,8 +195,7 @@ public final class RunningRound {
     public void start() {
         lifecycle.transitionTo(RoundState.WARMUP);
         if (!warmedUp) {
-            long durationTicks = config.durationTicks(STEP_MILLIS);
-            warmup.generateHistory(universe, fundamentals, 60L, 60L, 1_700_000_000L);
+            history = warmup.generateHistory(universe, fundamentals, 60L, 60L, 1_700_000_000L);
             warmup.seedBooks(engines.values(), fundamentals);
             warmedUp = true;
         }
@@ -184,10 +207,13 @@ public final class RunningRound {
     /**
      * Advance the world exactly one tick and return the events it produced. The order is fixed
      * and documented: (1) apply queued client commands, (2) advance fundamentals and
-     * volatility, (3) advance the session phase, (4) release due news, (5) let the bots act,
-     * (6) enforce margin.
+     * volatility, (3) advance the session phase (opening/closing auctions run at boundaries),
+     * (4) release due news, (5) let the bots act during continuous trading, (6) enforce margin.
      */
     public List<GameEvent> step() {
+        if (settled) {
+            throw new IllegalStateException("round is settled");
+        }
         if (!clock.step()) {
             throw new IllegalStateException("round is not running: state=" + lifecycle.state());
         }
@@ -203,24 +229,22 @@ public final class RunningRound {
         events.add(new GameEvent.Tick(tick, clock.logicalMillis()));
 
         for (SessionTransition transition : session.advance(tick)) {
-            if (transition.to() == SessionPhase.CONTINUOUS) {
-                events.add(new GameEvent.SessionOpened(roundId, tick));
-            } else if (transition.to() == SessionPhase.CLOSED) {
-                events.add(new GameEvent.SessionClosed(roundId, tick));
-            }
+            handleTransition(transition, tick, events);
         }
 
         events.addAll(news.advance(tick));
 
-        for (Instrument instrument : universe.all()) {
-            String symbol = instrument.ticker();
-            InstrumentEngine engine = engines.get(symbol);
-            double fundamental = fundamentals.fundamental(symbol);
-            double vol = volatility.multiplier(symbol) - 1.0;
-            double change = priceChange(symbol, engine.lastPrice());
-            for (BotRunner runner : runners) {
-                long netPosition = runner.participant().account().position(symbol).netQty();
-                events.addAll(runner.act(engine, fundamental, vol, change, netPosition, tick));
+        if (session.phase() == SessionPhase.CONTINUOUS) {
+            for (Instrument instrument : universe.all()) {
+                String symbol = instrument.ticker();
+                InstrumentEngine engine = engines.get(symbol);
+                double fundamental = fundamentals.fundamental(symbol);
+                double vol = volatility.multiplier(symbol) - 1.0;
+                double change = priceChange(symbol, engine.lastPrice());
+                for (BotRunner runner : runners) {
+                    long netPosition = runner.participant().account().position(symbol).netQty();
+                    events.addAll(runner.act(engine, fundamental, vol, change, netPosition, tick));
+                }
             }
         }
 
@@ -233,11 +257,89 @@ public final class RunningRound {
         return List.copyOf(events);
     }
 
+    private void handleTransition(SessionTransition transition, long tick, List<GameEvent> events) {
+        if (transition.to() == SessionPhase.OPENING_AUCTION || transition.to() == SessionPhase.CLOSING_AUCTION) {
+            beginAuction(transition.to(), tick, events);
+        }
+        if (transition.from() == SessionPhase.OPENING_AUCTION && transition.to() != SessionPhase.OPENING_AUCTION) {
+            clearAuction(SessionPhase.OPENING_AUCTION, false, tick, events);
+        }
+        if (transition.from() == SessionPhase.CLOSING_AUCTION && transition.to() != SessionPhase.CLOSING_AUCTION) {
+            clearAuction(SessionPhase.CLOSING_AUCTION, true, tick, events);
+        }
+        if (transition.to() == SessionPhase.CONTINUOUS) {
+            events.add(new GameEvent.SessionOpened(roundId, tick));
+        }
+        if (transition.to() == SessionPhase.CLOSING_AUCTION) {
+            lifecycle.transitionTo(RoundState.CLOSING);
+        }
+        if (transition.to() == SessionPhase.CLOSED) {
+            events.add(new GameEvent.SessionClosed(roundId, tick));
+        }
+    }
+
+    private void beginAuction(SessionPhase phase, long tick, List<GameEvent> events) {
+        activeAuctions = new LinkedHashMap<>();
+        for (Instrument instrument : universe.all()) {
+            activeAuctions.put(instrument.ticker(), new Auction());
+            events.add(new GameEvent.AuctionOpened(instrument.ticker(), phase, tick));
+        }
+    }
+
+    private void clearAuction(SessionPhase phase, boolean settleAfter, long tick, List<GameEvent> events) {
+        for (Instrument instrument : universe.all()) {
+            String symbol = instrument.ticker();
+            Auction auction = activeAuctions.get(symbol);
+            if (auction == null) {
+                continue;
+            }
+            InstrumentEngine engine = engines.get(symbol);
+            AuctionResult result = auction.clear(engine.lastPrice());
+            if (result.traded()) {
+                engine.setLastPrice(result.clearingPrice());
+                for (AuctionFill fill : result.fills()) {
+                    participant(fill.participantId()).account()
+                            .applyFill(symbol, fill.side(), fill.quantity(), fill.price());
+                }
+            }
+            events.add(new GameEvent.AuctionClosed(
+                    symbol, phase, result.clearingPrice(), result.matchedVolume(), tick));
+        }
+        activeAuctions = new LinkedHashMap<>();
+        if (settleAfter) {
+            settle(tick, events);
+        }
+    }
+
+    private void settle(long tick, List<GameEvent> events) {
+        Settlement.Result result = Settlement.settle(participants, marks(), startingCapitals, tick, roundId);
+        events.addAll(result.events());
+        lifecycle.transitionTo(RoundState.SETTLED);
+        settled = true;
+        clock.stop();
+    }
+
     private List<GameEvent> applyCommand(Command command, long tick) {
         if (command instanceof Command.PlaceOrder place) {
-            Participant participant = participant(place.participantId());
+            SessionPhase phase = session.phase();
+            if (phase == SessionPhase.OPENING_AUCTION || phase == SessionPhase.CLOSING_AUCTION) {
+                Auction auction = activeAuctions.get(place.symbol());
+                if (auction != null) {
+                    auction.submit(new AuctionOrder(
+                            place.commandId(), place.participantId(), place.side(), place.quantity(),
+                            place.price(), place.type() == OrderType.MARKET));
+                    return List.of(new GameEvent.OrderAccepted(
+                            place.commandId(), place.participantId(), place.symbol(), tick));
+                }
+            }
+            if (phase != SessionPhase.CONTINUOUS) {
+                return List.of(
+                        new GameEvent.OrderAccepted(place.commandId(), place.participantId(), place.symbol(), tick),
+                        new GameEvent.OrderRejected(place.commandId(), place.participantId(), place.symbol(),
+                                "market is not in continuous trading", tick));
+            }
             InstrumentEngine engine = engines.get(place.symbol());
-            return engine.submit(new com.virtualinvestor.core.book.IncomingOrder(
+            return engine.submit(new IncomingOrder(
                     place.commandId(), place.participantId(), place.symbol(), place.side(), place.type(),
                     place.quantity(), place.price()), tick);
         }
@@ -283,6 +385,10 @@ public final class RunningRound {
         return marks;
     }
 
+    public Map<String, List<Bar>> history() {
+        return history;
+    }
+
     // ── accessors ──────────────────────────────────────────────────────────
 
     public String roundId() {
@@ -295,6 +401,10 @@ public final class RunningRound {
 
     public LaunchConfig config() {
         return config;
+    }
+
+    public long stepMillis() {
+        return stepMillis;
     }
 
     public long tick() {
@@ -359,5 +469,9 @@ public final class RunningRound {
 
     public int pendingCommands() {
         return commands.size();
+    }
+
+    public boolean settled() {
+        return settled;
     }
 }

@@ -8,9 +8,9 @@
 
 ## 2. Warm-up and session behavior
 
-- [ ] 2.1 Implement start: `CREATED → WARMUP → RUNNING`, generating history and seeding books via `WarmupGenerator`; verify a round is running with non-empty books and history.
-- [ ] 2.2 Gate trading by session phase (auctions at boundaries, continuous only in `CONTINUOUS`); verify a timeline test that orders outside continuous are refused.
-- [ ] 2.3 Implement settlement at the close (`Settlement.settle`, emit `RoundSettled`, stop the loop); verify a settled round refuses further orders.
+- [x] 2.1 Implement start: `CREATED → WARMUP → RUNNING`, generating history and seeding books via `WarmupGenerator`; verify a round is running with non-empty books and history.
+- [x] 2.2 Gate trading by session phase (auctions at boundaries, continuous only in `CONTINUOUS`); verify a timeline test that orders outside continuous are refused.
+- [x] 2.3 Implement settlement at the close (`Settlement.settle`, emit `RoundSettled`, stop the loop); verify a settled round refuses further orders.
 
 ## 3. Order intake
 
