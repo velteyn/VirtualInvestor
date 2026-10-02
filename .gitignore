@@ -1,0 +1,18 @@
+# Build output
+server/**/target/
+*.class
+
+# Node
+**/node_modules/
+web/dist/
+
+# IDE / editor
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+
+# Logs
+*.log
