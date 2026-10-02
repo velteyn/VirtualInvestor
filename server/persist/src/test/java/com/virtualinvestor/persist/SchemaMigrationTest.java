@@ -54,6 +54,7 @@ class SchemaMigrationTest {
         }
         assertTrue(tables.containsAll(EXPECTED_TABLES),
                 () -> "missing tables: " + EXPECTED_TABLES.stream().filter(t -> !tables.contains(t)).toList());
-        assertEquals(1, flyway.info().applied().length, "the init migration should be applied");
+        assertTrue(flyway.info().applied().length >= 1, "migrations should be applied");
+        assertEquals(0, flyway.info().pending().length, "no migration should be left pending");
     }
 }
