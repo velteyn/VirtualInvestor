@@ -34,10 +34,12 @@ public final class MatchingEngine {
                 break;
             }
             long quantity = Math.min(remaining, best.remaining());
-            fills.add(new Fill(best.id(), incoming.id(), best.price(), quantity));
+            long makerQuantity = best.quantity();
             best.fill(quantity);
+            long makerRemainingAfter = best.remaining();
+            fills.add(new Fill(best.id(), incoming.id(), best.price(), quantity, makerQuantity, makerRemainingAfter));
             remaining -= quantity;
-            if (best.remaining() == 0L) {
+            if (makerRemainingAfter == 0L) {
                 book.removeOrder(best);
             }
         }

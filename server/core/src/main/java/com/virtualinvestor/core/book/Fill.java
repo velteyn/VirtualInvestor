@@ -5,5 +5,7 @@ public record Fill(
         String makerOrderId,
         String takerOrderId,
         double price,
-        long quantity) {
+        long quantity,
+        long makerQuantity,
+        long makerRemainingAfter) {
 }
