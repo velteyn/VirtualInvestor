@@ -37,6 +37,9 @@ public final class FundamentalModel {
     private final double stepFraction;
 
     private VolatilityState volatilityState;
+    private OrderFlowImpact orderFlowImpact;
+    private double reversionStrength;
+    private final Map<String, Double> reference = new LinkedHashMap<>();
     private double marketFactor;
 
     public FundamentalModel(
@@ -73,6 +76,7 @@ public final class FundamentalModel {
         for (Instrument instrument : universe.all()) {
             idioRandom.put(instrument.ticker(), streams.stream("fundamental.idio." + instrument.ticker()));
             fundamental.put(instrument.ticker(), instrument.referencePrice());
+            reference.put(instrument.ticker(), instrument.referencePrice());
             lastReturn.put(instrument.ticker(), 0.0);
         }
     }
@@ -83,6 +87,38 @@ public final class FundamentalModel {
      */
     public void setVolatilityState(VolatilityState volatilityState) {
         this.volatilityState = volatilityState;
+    }
+
+    /**
+     * Enable order-flow impact (design D1). When set, net aggressive flow moves the fundamental
+     * in addition to the factor, diffusion and jump terms.
+     */
+    public void setOrderFlowImpact(OrderFlowImpact orderFlowImpact) {
+        this.orderFlowImpact = orderFlowImpact;
+    }
+
+    /**
+     * The strength of the pull that tethers the fundamental back toward its reference each step
+     * (0 keeps no pull). Must be within [0, 1).
+     */
+    public void setReversionStrength(double reversionStrength) {
+        if (reversionStrength < 0.0 || reversionStrength >= 1.0) {
+            throw new IllegalArgumentException("reversionStrength must be within [0, 1)");
+        }
+        this.reversionStrength = reversionStrength;
+    }
+
+    /**
+     * Apply one step's net aggressive flow to an instrument and return the moved fundamental.
+     * A no-op when no impact is configured.
+     */
+    public double applyFlow(String ticker, double netFlow) {
+        if (orderFlowImpact == null || netFlow == 0.0) {
+            return fundamental(ticker);
+        }
+        double moved = orderFlowImpact.apply(fundamental(ticker), ticker, netFlow);
+        fundamental.put(ticker, moved);
+        return moved;
     }
 
     /** Advance every factor and fundamental value by one step. */
@@ -106,7 +142,25 @@ public final class FundamentalModel {
                     + idio;
             lastReturn.put(ticker, instrumentReturn);
             fundamental.merge(ticker, instrumentReturn, (current, value) -> current * Math.exp(value));
+
+            // The reference drifts with the same factors; the fundamental is pulled toward it
+            // so a flow-driven deviation reverts rather than persisting forever.
+            reference.merge(ticker, instrumentReturn, (current, value) -> current * Math.exp(value));
+            if (reversionStrength > 0.0) {
+                double ref = reference.get(ticker);
+                double current = fundamental.get(ticker);
+                fundamental.put(ticker, current + reversionStrength * (ref - current));
+            }
         }
+    }
+
+    /** The reference value the fundamental reverts toward (the factor/diffusion drift path). */
+    public double reference(String ticker) {
+        Double value = reference.get(ticker);
+        if (value == null) {
+            throw new IllegalArgumentException("unknown instrument: " + ticker);
+        }
+        return value;
     }
 
     /** Apply a discrete jump to one instrument's fundamental value (news, design D5). */

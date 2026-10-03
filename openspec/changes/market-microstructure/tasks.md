@@ -2,9 +2,9 @@
 
 ## 1. Impact model in the core
 
-- [ ] 1.1 Add an `OrderFlowImpact` component to `FundamentalModel` with transient and permanent coefficients, a decay, and a liquidity scale from `freeFloat`; verify a unit test that a given net flow moves `F` in the flow direction and by less for a more liquid instrument.
-- [ ] 1.2 Implement the reversion term that pulls `F` toward a per-instrument reference; verify a test that after a transient burst `F` reverts toward the reference and a sustained flow leaves a permanent offset.
-- [ ] 1.3 Keep the reference path as the market/sector/diffusion drift so the reference itself still moves; verify the fundamental still responds to factor moves with impact disabled (coefficients zero).
+- [x] 1.1 Add an `OrderFlowImpact` component to `FundamentalModel` with transient and permanent coefficients, a decay, and a liquidity scale from `freeFloat`; verify a unit test that a given net flow moves `F` in the flow direction and by less for a more liquid instrument.
+- [x] 1.2 Implement the reversion term that pulls `F` toward a per-instrument reference; verify a test that after a transient burst `F` reverts toward the reference and a sustained flow leaves a permanent offset.
+- [x] 1.3 Keep the reference path as the market/sector/diffusion drift so the reference itself still moves; verify the fundamental still responds to factor moves with impact disabled (coefficients zero).
 
 ## 2. Flow signal from the runtime
 
