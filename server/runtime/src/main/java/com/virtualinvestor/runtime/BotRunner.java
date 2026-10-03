@@ -14,6 +14,7 @@ import com.virtualinvestor.core.book.Fill;
 import com.virtualinvestor.core.participant.Participant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 
 /**
@@ -26,14 +27,30 @@ final class BotRunner {
 
     private static final long QUOTE_SIZE = 500L;
 
+    /** Order size is at most this fraction of the participant's equity, in shares. */
+    private static final double SIZE_FRACTION_OF_EQUITY = 0.02;
+    /** Hard cap on a single order's size, in shares, regardless of equity. */
+    private static final long MAX_ORDER_SIZE = 5_000L;
+
     private final Participant participant;
     private final BotStrategy strategy;
     private final MarketMakerStrategy maker;
     private final long quoteRefreshTicks;
     private final double tickSize;
+    private final long baseSize;
 
     private final List<String> restingQuoteIds = new ArrayList<>();
     private long sequence;
+    private boolean stopped;
+
+    /** Size an order from equity: a fraction of equity (at a rough price), capped. */
+    private long sizeForEquity(double equity, double price) {
+        if (price <= 0.0) {
+            return Math.min(baseSize, MAX_ORDER_SIZE);
+        }
+        long byEquity = (long) Math.floor(equity * SIZE_FRACTION_OF_EQUITY / price);
+        return Math.max(1L, Math.min(byEquity, MAX_ORDER_SIZE));
+    }
 
     BotRunner(Participant participant, BotStrategy strategy, MarketMakerStrategy maker, long quoteRefreshTicks) {
         this(participant, strategy, maker, quoteRefreshTicks, 0.01);
@@ -46,6 +63,15 @@ final class BotRunner {
         this.maker = maker;
         this.quoteRefreshTicks = quoteRefreshTicks;
         this.tickSize = tickSize;
+        this.baseSize = strategy != null ? 100L : QUOTE_SIZE;
+    }
+
+    boolean stopped() {
+        return stopped;
+    }
+
+    void stop() {
+        this.stopped = true;
     }
 
     Participant participant() {
@@ -54,19 +80,22 @@ final class BotRunner {
 
     List<GameEvent> act(
             InstrumentEngine engine, double fundamental, double volatility, double priceChange,
-            long netPosition, long tick, Consumer<Fill> onFill) {
+            long netPosition, long tick, double equity, Consumer<Fill> onFill) {
+        if (stopped) {
+            return List.of();
+        }
         if (maker != null) {
             if (tick % quoteRefreshTicks != 0L) {
                 return List.of();
             }
-            return refreshQuote(engine, fundamental, volatility, netPosition, tick, onFill);
+            return refreshQuote(engine, fundamental, volatility, netPosition, tick, equity, onFill);
         }
-        return take(engine, fundamental, volatility, priceChange, netPosition, tick, onFill);
+        return take(engine, fundamental, volatility, priceChange, netPosition, tick, equity, onFill);
     }
 
     private List<GameEvent> refreshQuote(
             InstrumentEngine engine, double fundamental, double volatility, long netPosition, long tick,
-            Consumer<Fill> onFill) {
+            double equity, Consumer<Fill> onFill) {
         List<GameEvent> events = new ArrayList<>();
         for (String id : restingQuoteIds) {
             events.addAll(engine.cancel(id, tick));
@@ -74,11 +103,12 @@ final class BotRunner {
         restingQuoteIds.clear();
 
         Quote quote = maker.quote(fundamental, volatility, netPosition);
+        long size = sizeForEquity(equity, fundamental);
         String symbol = engine.symbol();
         String bidId = participant.id() + "-" + symbol + "-b" + (sequence++);
         String askId = participant.id() + "-" + symbol + "-a" + (sequence++);
-        submit(engine, new IncomingOrder(bidId, participant.id(), symbol, OrderSide.BUY, OrderType.LIMIT, QUOTE_SIZE, round(quote.bidPrice())), tick, events, onFill);
-        submit(engine, new IncomingOrder(askId, participant.id(), symbol, OrderSide.SELL, OrderType.LIMIT, QUOTE_SIZE, round(quote.askPrice())), tick, events, onFill);
+        submit(engine, new IncomingOrder(bidId, participant.id(), symbol, OrderSide.BUY, OrderType.LIMIT, size, round(quote.bidPrice())), tick, events, onFill);
+        submit(engine, new IncomingOrder(askId, participant.id(), symbol, OrderSide.SELL, OrderType.LIMIT, size, round(quote.askPrice())), tick, events, onFill);
         restingQuoteIds.add(bidId);
         restingQuoteIds.add(askId);
         return events;
@@ -86,7 +116,7 @@ final class BotRunner {
 
     private List<GameEvent> take(
             InstrumentEngine engine, double fundamental, double volatility, double priceChange,
-            long netPosition, long tick, Consumer<Fill> onFill) {
+            long netPosition, long tick, double equity, Consumer<Fill> onFill) {
         BotContext context = new BotContext(
                 engine.symbol(), engine.lastPrice(), fundamental, priceChange, volatility, netPosition,
                 participant.account().cash(), null, tick);
@@ -96,10 +126,12 @@ final class BotRunner {
         }
         List<GameEvent> events = new ArrayList<>();
         String symbol = engine.symbol();
+        long size = sizeForEquity(equity, engine.lastPrice());
         for (OrderIntent intent : intents) {
+            long quantity = Math.min(intent.quantity(), size);
             String id = participant.id() + "-" + symbol + "-" + (sequence++);
             submit(engine, new IncomingOrder(
-                    id, participant.id(), symbol, intent.side(), intent.type(), intent.quantity(), intent.price()),
+                    id, participant.id(), symbol, intent.side(), intent.type(), quantity, intent.price()),
                     tick, events, onFill);
         }
         return events;

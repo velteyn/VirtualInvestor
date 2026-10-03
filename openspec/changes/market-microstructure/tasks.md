@@ -24,9 +24,9 @@
 
 ## 5. Participant risk limits
 
-- [ ] 5.1 Add equity-relative order sizing with a cap to the bot runners; verify a test that a bot's order size falls when its equity falls and never exceeds the cap.
-- [ ] 5.2 Add a risk floor: a participant at or below the floor stops trading and is flattened; verify a test that a losing strategy halts and takes no further orders.
-- [ ] 5.3 Verify losses are bounded: run a full round where a rival plays a losing strategy and confirm its final equity is within a small multiple of its capital, not deeply negative.
+- [x] 5.1 Add equity-relative order sizing with a cap to the bot runners; verify a test that a bot's order size falls when its equity falls and never exceeds the cap.
+- [x] 5.2 Add a risk floor: a participant at or below the floor stops trading and is flattened; verify a test that a losing strategy halts and takes no further orders.
+- [x] 5.3 Verify losses are bounded: run a full round where a rival plays a losing strategy and confirm its final equity is within a small multiple of its capital, not deeply negative.
 
 ## 6. Verification against the live market
 

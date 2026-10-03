@@ -73,6 +73,8 @@ public final class RunningRound {
     private static final double TRANSIENT_IMPACT = 20.0;
     private static final double TRANSIENT_DECAY = 0.97;
     private static final double REVERSION_STRENGTH = 0.02;
+    /** A bot stops and is flattened once its equity falls to this fraction of starting capital. */
+    private static final double RISK_FLOOR_FRACTION = 0.20;
 
     private final String roundId;
     private final long seed;
@@ -345,9 +347,18 @@ public final class RunningRound {
                 double fundamental = fundamentals.fundamental(symbol);
                 double vol = volatility.multiplier(symbol) - 1.0;
                 double change = priceChange(symbol, engine.lastPrice());
+                Map<String, Double> liveMarks = marks();
                 for (BotRunner runner : runners) {
+                    // Risk floor: stop and flatten a participant whose equity has hit the floor.
+                    double equity = runner.participant().account().equity(liveMarks);
+                    if (!runner.stopped() && equity <= config.startingCapital() * RISK_FLOOR_FRACTION) {
+                        runner.stop();
+                        events.addAll(com.virtualinvestor.core.game.MarginManager.forceClose(
+                                runner.participant(), liveMarks, tick));
+                        continue;
+                    }
                     long netPosition = runner.participant().account().position(symbol).netQty();
-                    events.addAll(runner.act(engine, fundamental, vol, change, netPosition, tick,
+                    events.addAll(runner.act(engine, fundamental, vol, change, netPosition, tick, equity,
                             fill -> applyFill(fill, symbol)));
                 }
             }
