@@ -1,26 +1,41 @@
 /**
- * Mounts the `openalgo-charts` widget over our adapters. The library owns the
- * entire terminal (charts, drawing rail, top bar, panels, order ticket); this
- * file only supplies the feed, the symbol and the intervals.
+ * Mounts the `openalgo-charts` widget over our adapters and drives the trade overlays from the
+ * server's streams. The widget owns the chart, chrome and right-click order menu; we supply the
+ * data feed, route order intents to the socket, and reconcile the order/position frames into the
+ * on-chart overlays via the trade tier's `TradeController`.
  */
 import { createWidget } from 'openalgo-charts/widget';
+import { TradeController } from 'openalgo-charts/trade';
 import type { RoundResponse, ServerClient } from '../adapters/serverClient';
 import { VirtualInvestorDataFeed } from '../adapters/dataFeed';
 import { VirtualInvestorNewsFeed } from '../adapters/newsFeed';
 import { VirtualInvestorTradeFeed } from '../adapters/tradeFeed';
+import { mountPanels } from './panels';
 
 export interface Terminal {
   destroy(): void;
 }
+
+const PARTICIPANT = 'human';
+let orderCounter = 0;
 
 export function mountTerminal(root: HTMLElement, client: ServerClient, round: RoundResponse): Terminal {
   const dataFeed = new VirtualInvestorDataFeed(client, round.roundId);
   const tradeFeed = new VirtualInvestorTradeFeed(client);
   const newsFeed = new VirtualInvestorNewsFeed(client);
 
-  // The data feed is a creation-time option; passing it here is what makes the
-  // chart load bars. The top bar and rail are the terminal's menus.
-  const widget = createWidget(root, {
+  // Join the round so order commands from this socket route to it.
+  client.joinRound(round.roundId, PARTICIPANT);
+
+  // The layout grid: chart cell (widget), right column (panels), bottom strip (positions).
+  const layout = document.createElement('div');
+  layout.className = 'vi-terminal';
+  const chartCell = document.createElement('div');
+  chartCell.className = 'vi-chart';
+  layout.appendChild(chartCell);
+  root.appendChild(layout);
+
+  const widget = createWidget(chartCell, {
     feed: dataFeed,
     symbol: 'NVDO',
     exchange: 'VNDX',
@@ -30,18 +45,64 @@ export function mountTerminal(root: HTMLElement, client: ServerClient, round: Ro
     statusline: true,
     panels: true,
     persist: false,
+    mobile: 'auto',
+    // The chart's order menu raises an intent; we send it over the socket. Quantity defaults
+    // to one lot; the dedicated ticket (bottom bar) offers full sizing.
+    onOrder: (order) => {
+      const price = order.price ?? undefined;
+      client.placeOrder(round.roundId, PARTICIPANT, {
+        clientToken: `vi-${++orderCounter}`,
+        symbol: 'NVDO',
+        side: order.side,
+        type: order.type === 'SL' ? 'STOP' : order.type,
+        quantity: 100,
+        price,
+      });
+    },
   });
 
+  // Trade overlays: working-order lines, position/P&L, brackets, driven by the stream.
+  const trades = new TradeController(widget.chart.tradeHost(0));
+  const syncState = (): void => {
+    const state = tradeFeed.state();
+    trades.reconcile(
+      state.orders.map((order) => ({
+        id: order.id,
+        symbol: order.symbol,
+        side: order.side,
+        type: order.type as never,
+        qty: order.qty,
+        filledQty: order.filledQty,
+        price: order.price,
+        status: order.status as never,
+      })),
+      state.positions.map((position) => ({
+        symbol: position.symbol,
+        netQty: position.netQty,
+        avgPrice: position.avgPrice,
+      })),
+    );
+  };
+  const unsubscribeTrades = tradeFeed.onChange(syncState);
+
+  // The rivals, watchlist, news and positions panels around the chart.
+  const panels = mountPanels(layout, client, round, tradeFeed);
+
+  // A small session banner (kept out of the way on narrow screens).
   const banner = document.createElement('div');
   banner.className = 'vi-session';
   banner.textContent = `Round ${round.roundId} · ${round.preset} · $${round.startingCapital.toLocaleString()} · ${round.durationMinutes}m`;
-  root.appendChild(banner);
+  document.body.appendChild(banner);
 
   return {
     destroy() {
+      unsubscribeTrades();
+      panels.destroy();
       widget.destroy();
       tradeFeed.dispose();
       newsFeed.dispose();
+      banner.remove();
+      layout.remove();
     },
   };
 }

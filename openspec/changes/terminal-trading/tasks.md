@@ -13,20 +13,20 @@
 
 ## 3. Trade tier and order routing
 
-- [ ] 3.1 Mount the widget trade tier (working-order lines, position/P&L line, SL/TP bracket) over our feeds; verify a working order and a position render from streamed frames.
-- [ ] 3.2 Route the widget `onOrder` (menu and ticket) into a `placeOrder` wire command over the socket; verify an order placed in the terminal reaches the round and its line appears.
-- [ ] 3.3 Route drag-to-modify and cancel into `modifyOrder`/`cancelOrder`; verify a dragged line settles at the server-accepted price and a cancelled order disappears.
+- [x] 3.1 Mount the widget trade tier (working-order lines, position/P&L line, SL/TP bracket) over our feeds; verify a working order and a position render from streamed frames.
+- [x] 3.2 Route the widget `onOrder` (menu and ticket) into a `placeOrder` wire command over the socket; verify an order placed in the terminal reaches the round and its line appears.
+- [x] 3.3 Route drag-to-modify and cancel into `modifyOrder`/`cancelOrder`; verify a dragged line settles at the server-accepted price and a cancelled order disappears.
 
 ## 4. Panels
 
-- [ ] 4.1 Build the rivals leaderboard panel (ranked, equity + return, excludes institutions, updates live); verify it reorders as standings change.
-- [ ] 4.2 Build the watchlist panel from quote/price frames; verify prices update live.
-- [ ] 4.3 Wire the news panel to the `NewsFeed` over news frames; verify headlines appear as released with source and scope.
-- [ ] 4.4 Build the positions strip with live unrealized P&L and a close action; verify P&L updates on a tick and closing flattens the position.
+- [x] 4.1 Build the rivals leaderboard panel (ranked, equity + return, excludes institutions, updates live); verify it reorders as standings change.
+- [x] 4.2 Build the watchlist panel from quote/price frames; verify prices update live.
+- [x] 4.3 Wire the news panel to the `NewsFeed` over news frames; verify headlines appear as released with source and scope.
+- [x] 4.4 Build the positions strip with live unrealized P&L and a close action; verify P&L updates on a tick and closing flattens the position.
 
 ## 5. Layout and reconciliation
 
-- [ ] 5.1 Assemble the approved layout (chart left; rivals/watchlist/news right; order ticket + positions bottom) and verify all panels are visible and populated.
+- [x] 5.1 Assemble the approved layout (chart left; rivals/watchlist/news right; order ticket + positions bottom) and verify all panels are visible and populated.
 - [ ] 5.2 Handle socket reconnect with a resync of orders, positions and account; verify the terminal reconciles after a dropped connection.
 
 ## 6. Verification and docs

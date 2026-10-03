@@ -1,158 +1,105 @@
 /**
- * `OrderFeed` + `AccountFeed` adapter: the write path and account reads for
- * `openalgo-charts`' trade layer, backed by the server's WebSocket stream. The
- * terminal's `OrderEngine` is optimistic UI; the server's world is
- * authoritative, so every order update here originates from a server frame.
- * Until the order-entry wire handlers land, writes acknowledge optimistically
- * and the server's later `order`/`position` frames reconcile them.
+ * Order/position/account state accumulated from the server's WebSocket stream, for the
+ * terminal's trade overlays. The server is authoritative; this adapter only mirrors the
+ * `order`/`position`/`account` frames it receives.
  */
-import type {
-  AccountSnapshot,
-  Execution,
-  ModifyPatch,
-  Order,
-  OrderFeed,
-  PlaceRequest,
-  Position,
-  TradeMode,
-} from 'openalgo-charts/trade';
 import type { ServerClient, WirePayload } from './serverClient';
 
-interface OrderListener {
-  (order: Order, info: { clientToken?: string }): void;
+export interface LiveOrder {
+  id: string;
+  symbol: string;
+  side: 'BUY' | 'SELL';
+  type: string;
+  qty: number;
+  filledQty: number;
+  price: number;
+  status: string;
 }
-interface PositionListener {
-  (positions: Position[]): void;
+
+export interface LivePosition {
+  symbol: string;
+  netQty: number;
+  avgPrice: number;
 }
 
-/** Only the members the terminal uses are implemented; the rest are declared unsupported. */
-export class VirtualInvestorTradeFeed implements OrderFeed {
-  readonly features = undefined;
+export interface LiveAccount {
+  cash: number;
+  realizedPnl: number;
+}
 
-  private readonly orderListeners = new Set<OrderListener>();
-  private readonly positionListeners = new Set<PositionListener>();
-  private readonly accountListeners = new Set<(snapshot: AccountSnapshot) => void>();
-  private readonly cancelUnsubscribes: Array<() => void> = [];
-  private counter = 0;
+export interface TradeState {
+  orders: LiveOrder[];
+  positions: LivePosition[];
+  account: LiveAccount | null;
+}
 
-  constructor(
-    private readonly client: ServerClient,
-    private readonly accountId = 'human',
-  ) {
-    this.cancelUnsubscribes.push(client.onPayload((payload) => this.onPayload(payload)));
+/** Mirrors the server's trade frames into a live order/position/account snapshot. */
+export class VirtualInvestorTradeFeed {
+  private readonly orders = new Map<string, LiveOrder>();
+  private readonly positions = new Map<string, LivePosition>();
+  private account: LiveAccount | null = null;
+  private readonly listeners = new Set<(state: TradeState) => void>();
+  private readonly unsubscribe: () => void;
+
+  constructor(private readonly client: ServerClient) {
+    this.unsubscribe = client.onPayload((payload) => this.onPayload(payload));
   }
 
   private onPayload(payload: WirePayload): void {
     if (payload.type === 'order') {
-      const order: Order = {
-        id: String(payload.orderId),
-        symbol: String(payload.symbol),
-        side: payload.side === 'SELL' ? 'SELL' : 'BUY',
-        type: mapOrderType(payload.type),
-        qty: Number(payload.quantity),
-        filledQty: Number(payload.filledQty ?? 0),
-        price: Number(payload.price ?? 0),
-        status: mapStatus(payload.status),
-      };
-      for (const listener of this.orderListeners) {
-        listener(order, { clientToken: undefined });
+      const id = String(payload.orderId);
+      const status = String(payload.status);
+      if (status === 'cancelled' || status === 'rejected') {
+        this.orders.delete(id);
+      } else {
+        this.orders.set(id, {
+          id,
+          symbol: String(payload.symbol),
+          side: payload.side === 'SELL' ? 'SELL' : 'BUY',
+          type: String(payload.type ?? 'MARKET'),
+          qty: Number(payload.quantity ?? 0),
+          filledQty: Number(payload.filledQty ?? 0),
+          price: Number(payload.price ?? 0),
+          status,
+        });
       }
+      this.emit();
     } else if (payload.type === 'position') {
-      const position: Position = {
-        symbol: String(payload.symbol),
-        netQty: Number(payload.netQty),
-        avgPrice: Number(payload.avgPrice),
-      };
-      for (const listener of this.positionListeners) {
-        listener([position]);
+      const symbol = String(payload.symbol);
+      const netQty = Number(payload.netQty);
+      if (netQty === 0) {
+        this.positions.delete(symbol);
+      } else {
+        this.positions.set(symbol, { symbol, netQty, avgPrice: Number(payload.avgPrice) });
       }
+      this.emit();
     } else if (payload.type === 'account') {
-      const snapshot: AccountSnapshot = {
-        accountId: String(payload.participantId),
-        mode: 'analyzer',
-        asOf: Date.now() / 1000,
-        balance: Number(payload.cash),
-        realizedPnl: Number(payload.realizedPnl ?? 0),
-      };
-      for (const listener of this.accountListeners) {
-        listener(snapshot);
-      }
+      this.account = { cash: Number(payload.cash), realizedPnl: Number(payload.realizedPnl ?? 0) };
+      this.emit();
     }
   }
 
-  async place(req: PlaceRequest & { mode: TradeMode }): Promise<{ orderId: string }> {
-    // The server's command handlers commit the order; this optimistic id keeps
-    // the engine's state machine moving until the authoritative frame arrives.
-    return { orderId: `local-${++this.counter}-${req.symbol}` };
-  }
-
-  async modify(_orderId: string, _patch: ModifyPatch): Promise<void> {
-    // Modify acknowledgement is server-sourced; nothing to send yet.
-  }
-
-  async cancel(_orderId: string): Promise<void> {
-    // Cancel acknowledgement is server-sourced; nothing to send yet.
-  }
-
-  subscribeOrders(listener?: (orders: Order[]) => void, onUpdate?: OrderListener): () => void {
-    const handler: OrderListener = (order, info) => {
-      listener?.([order]);
-      onUpdate?.(order, info);
+  state(): TradeState {
+    return {
+      orders: [...this.orders.values()],
+      positions: [...this.positions.values()],
+      account: this.account,
     };
-    this.orderListeners.add(handler);
-    return () => this.orderListeners.delete(handler);
   }
 
-  subscribePositions(listener: PositionListener): () => void {
-    this.positionListeners.add(listener);
-    return () => this.positionListeners.delete(listener);
+  onChange(listener: (state: TradeState) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
   }
 
-  subscribeAccount(_accountId: string, onSnapshot: (snapshot: AccountSnapshot) => void): () => void {
-    this.accountListeners.add(onSnapshot);
-    return () => this.accountListeners.delete(onSnapshot);
-  }
-
-  async getAccountPositions(): Promise<readonly Position[]> {
-    return [];
-  }
-
-  async getExecutions(): Promise<readonly Execution[]> {
-    return [];
+  private emit(): void {
+    const state = this.state();
+    for (const listener of this.listeners) {
+      listener(state);
+    }
   }
 
   dispose(): void {
-    for (const unsubscribe of this.cancelUnsubscribes) {
-      unsubscribe();
-    }
-    this.cancelUnsubscribes.length = 0;
-  }
-}
-
-function mapOrderType(raw: unknown): Order['type'] {
-  switch (raw) {
-    case 'LIMIT':
-      return 'LIMIT';
-    case 'SL':
-      return 'SL';
-    case 'SL_M':
-      return 'SL-M';
-    default:
-      return 'MARKET';
-  }
-}
-
-function mapStatus(raw: unknown): Order['status'] {
-  switch (raw) {
-    case 'PARTIAL':
-      return 'partial';
-    case 'FILLED':
-      return 'filled';
-    case 'CANCELLED':
-      return 'cancelled';
-    case 'REJECTED':
-      return 'rejected';
-    default:
-      return 'working';
+    this.unsubscribe();
   }
 }
