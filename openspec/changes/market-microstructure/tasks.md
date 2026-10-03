@@ -14,13 +14,13 @@
 
 ## 3. Determinism and safety
 
-- [ ] 3.1 Confirm no new randomness: add/extend a golden-master test that a fixed seed + flow scenario hashes identically on re-run.
-- [ ] 3.2 Add a bounded-drift guard test: over a long run with continuous flow and no reversion, `F` stays within a configured band around the reference; verify the reversion keeps it bounded.
+- [x] 3.1 Confirm no new randomness: add/extend a golden-master test that a fixed seed + flow scenario hashes identically on re-run.
+- [x] 3.2 Add a bounded-drift guard test: over a long run with continuous flow and no reversion, `F` stays within a configured band around the reference; verify the reversion keeps it bounded.
 
 ## 4. Observability and calibration
 
-- [ ] 4.1 Expose the impact coefficients, reversion strength, and the current `fundamental` vs `reference` gap via accessors; verify a test that reads them.
-- [ ] 4.2 Extend the calibration harness to run a round with flow and report impact decay and reversion; record the results in `docs/calibration.md`.
+- [x] 4.1 Expose the impact coefficients, reversion strength, and the current `fundamental` vs `reference` gap via accessors; verify a test that reads them.
+- [x] 4.2 Extend the calibration harness to run a round with flow and report impact decay and reversion; record the results in `docs/calibration.md`.
 
 ## 5. Verification against the live market
 

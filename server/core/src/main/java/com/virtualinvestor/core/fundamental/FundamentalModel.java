@@ -116,6 +116,10 @@ public final class FundamentalModel {
         if (orderFlowImpact == null || netFlow == 0.0) {
             return fundamental(ticker);
         }
+        // The permanent part moves the reference too, so reversion preserves it; the transient
+        // part moves only the fundamental.
+        double permanent = orderFlowImpact.permanentFraction(ticker, netFlow);
+        reference.merge(ticker, permanent, (current, fraction) -> Math.max(0.01, current * (1.0 + fraction)));
         double moved = orderFlowImpact.apply(fundamental(ticker), ticker, netFlow);
         fundamental.put(ticker, moved);
         return moved;
@@ -152,6 +156,15 @@ public final class FundamentalModel {
                 fundamental.put(ticker, current + reversionStrength * (ref - current));
             }
         }
+    }
+
+    /** The configured order-flow impact, or null when disabled. */
+    public OrderFlowImpact orderFlowImpact() {
+        return orderFlowImpact;
+    }
+
+    public double reversionStrength() {
+        return reversionStrength;
     }
 
     /** The reference value the fundamental reverts toward (the factor/diffusion drift path). */

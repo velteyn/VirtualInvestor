@@ -39,6 +39,40 @@ Interpretation:
 - Realized annualized market vol (~0.39) exceeds the 0.30 input because the equal-weight
   market proxy carries idiosyncratic variance in addition to the market factor.
 
+## Order-flow impact
+
+Run:
+
+```bash
+cd server && mvn -q -pl core compile && \
+  java -cp core/target/classes com.virtualinvestor.core.calibration.ImpactCalibration
+```
+
+Configuration: synthetic instrument, liquidity 1,000,000 shares (free float), a single impulse
+of 100 shares of buy flow, permanent coefficient 5.0, transient 20.0, transient decay 0.97,
+reversion 0.02. Coefficients are per unit flow divided by tradeable float.
+
+Latest measured output:
+
+```
+peGapAfterImpulse=0.00250000
+gapAfterSteps[1]=0.00195902
+gapAfterSteps[5]=0.00180694
+gapAfterSteps[20]=0.00133455
+gapAfterSteps[100]=0.00026511
+gapAfterSteps[500]=0.00000008
+permanentCoefficient=5.000000
+transientCoefficient=20.000000
+transientDecay=0.9700
+reversionStrength=0.0200
+```
+
+Interpretation: a 100-share aggressive order moves the fundamental ~0.25% at the moment of
+impact, decays to ~0.027% within 100 steps, and leaves a ~0.05% permanent offset that survives
+reversion. Impact scales inversely with liquidity, so an illiquid name moves more for the same
+order. The permanent component moves the reference (so reversion preserves it); the transient
+component moves only the fundamental (so it decays).
+
 ## Matching throughput
 
 Run:

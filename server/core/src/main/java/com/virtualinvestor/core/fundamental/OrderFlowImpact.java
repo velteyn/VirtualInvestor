@@ -72,6 +72,16 @@ public final class OrderFlowImpact {
         return Math.max(0.01, fundamental * (1.0 + permanent + transientNow));
     }
 
+    /**
+     * The permanent fraction an instrument's <em>reference</em> should move for this step's flow.
+     * Kept separate from {@link #apply} so the reference absorbs the durable part and the
+     * reversion term (which pulls the fundamental toward the reference) does not erase it.
+     */
+    public double permanentFraction(String instrument, double netFlow) {
+        double scale = 1.0 / Math.max(1e-9, liquidity.getOrDefault(instrument, 1.0));
+        return permanentCoefficient * netFlow * scale;
+    }
+
     public double permanentCoefficient() {
         return permanentCoefficient;
     }

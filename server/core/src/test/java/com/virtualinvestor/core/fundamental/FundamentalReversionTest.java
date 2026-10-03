@@ -48,13 +48,16 @@ class FundamentalReversionTest {
         model.setReversionStrength(0.10);
         model.setOrderFlowImpact(new OrderFlowImpact(0.002, 0.0, 0.5, Map.of("AAA", 1.0)));
 
+        double originalReference = model.reference("AAA");
         for (int i = 0; i < 50; i++) {
             model.applyFlow("AAA", 100.0);
         }
-        double reference = model.reference("AAA");
-        double after = model.fundamental("AAA");
-        assertTrue(after > reference * 1.01, "sustained flow should leave a permanent offset: "
-                + after + " vs " + reference);
+        // The permanent impact moves the reference itself, so it survives reversion.
+        assertTrue(model.reference("AAA") > originalReference * 1.01,
+                "sustained flow should durably raise the reference: "
+                        + model.reference("AAA") + " vs " + originalReference);
+        assertEquals(model.fundamental("AAA"), model.reference("AAA"), 1e-9,
+                "with no transient part, the fundamental settles on the moved reference");
     }
 
     @Test

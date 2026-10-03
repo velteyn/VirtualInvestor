@@ -1,5 +1,6 @@
 package com.virtualinvestor.runtime;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -40,6 +41,17 @@ class OrderFlowRuntimeTest {
         double fundamentalAfter = round.fundamentals().fundamental("NVDO");
         assertNotEquals(fundamentalBefore, fundamentalAfter, "flow should move the fundamental");
         assertTrue(round.player().account().position("NVDO").netQty() > 0L);
+    }
+
+    @Test
+    void impactAndReversionAreObservable() {
+        RunningRound round = continuousRound(93L);
+        assertTrue(round.fundamentals().orderFlowImpact() != null, "impact is enabled");
+        assertTrue(round.fundamentals().reversionStrength() > 0.0, "reversion is enabled");
+
+        double gap = round.fundamentalGap("NVDO");
+        assertEquals(round.fundamentals().fundamental("NVDO") - round.fundamentals().reference("NVDO"),
+                gap, 1e-9);
     }
 
     @Test

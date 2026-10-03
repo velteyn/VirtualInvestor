@@ -66,9 +66,11 @@ public final class RunningRound {
     private static final double VOLATILITY_DECAY = 0.99;
     private static final long QUOTE_REFRESH_TICKS = 50L;
     private static final long RANDOM_NEWS_TICKS = 1500L;
-    // Order-flow impact and reversion (tunable; see docs/calibration.md).
-    private static final double PERMANENT_IMPACT = 0.00002;
-    private static final double TRANSIENT_IMPACT = 0.00008;
+    // Order-flow impact and reversion. Coefficients are per unit flow divided by the
+    // instrument's tradeable float (shares), so ~100 shares moves a name ~0.05% permanently
+    // and ~0.2% transiently. Tuned via docs/calibration.md (ImpactCalibration).
+    private static final double PERMANENT_IMPACT = 5.0;
+    private static final double TRANSIENT_IMPACT = 20.0;
     private static final double TRANSIENT_DECAY = 0.97;
     private static final double REVERSION_STRENGTH = 0.02;
 
@@ -137,9 +139,13 @@ public final class RunningRound {
         fundamentals.setVolatilityState(volatility);
         // Order-flow impact (design D1-D4): trading moves the latent fundamental, scaled by
         // liquidity (free float), with a reversion pull so the market stays tethered.
+        // Liquidity is the tradeable size a normal order is measured against, in shares: a
+        // fraction of the free float. This keeps the liquidity scale near 1 for typical
+        // instruments, so a few hundred shares move an illiquid name more than a liquid one.
         Map<String, Double> liquidity = new LinkedHashMap<>();
         for (Instrument instrument : universe.all()) {
-            liquidity.put(instrument.ticker(), Math.max(1.0, instrument.freeFloat() * 1_000_000.0));
+            double tradeable = Math.max(10_000.0, instrument.freeFloat() * 1_000_000.0);
+            liquidity.put(instrument.ticker(), tradeable);
         }
         fundamentals.setOrderFlowImpact(new com.virtualinvestor.core.fundamental.OrderFlowImpact(
                 PERMANENT_IMPACT, TRANSIENT_IMPACT, TRANSIENT_DECAY, liquidity));
