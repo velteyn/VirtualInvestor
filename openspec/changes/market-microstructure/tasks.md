@@ -22,7 +22,13 @@
 - [x] 4.1 Expose the impact coefficients, reversion strength, and the current `fundamental` vs `reference` gap via accessors; verify a test that reads them.
 - [x] 4.2 Extend the calibration harness to run a round with flow and report impact decay and reversion; record the results in `docs/calibration.md`.
 
-## 5. Verification against the live market
+## 5. Participant risk limits
 
-- [ ] 5.1 Run a bot-only round on the server with impact enabled and verify the market still moves, ranks reorder, and settlement completes; compare rival outcomes with the pre-change run.
-- [ ] 5.2 Run a round where a client submits a large order over the wire and verify the traded price and the fundamental both move and partially persist.
+- [ ] 5.1 Add equity-relative order sizing with a cap to the bot runners; verify a test that a bot's order size falls when its equity falls and never exceeds the cap.
+- [ ] 5.2 Add a risk floor: a participant at or below the floor stops trading and is flattened; verify a test that a losing strategy halts and takes no further orders.
+- [ ] 5.3 Verify losses are bounded: run a full round where a rival plays a losing strategy and confirm its final equity is within a small multiple of its capital, not deeply negative.
+
+## 6. Verification against the live market
+
+- [ ] 6.1 Run a bot-only round on the server with impact enabled and verify the market still moves, ranks reorder, and settlement completes; compare rival outcomes with the pre-change run.
+- [ ] 6.2 Run a round where a client submits a large order over the wire and verify the traded price and the fundamental both move and partially persist.

@@ -18,6 +18,9 @@ fundamentals.
   drift without bound and mean reversion is observable.
 - Make the **magnitude of impact depend on liquidity** (free float / book depth), so large
   orders move illiquid names more than liquid ones.
+- Introduce **participant risk limits**: every bot SHALL size its orders as a fraction of its
+  equity and SHALL stop trading (and be flattened) once its equity falls below a floor, so a
+  losing strategy cannot drive an account to a multiple of its starting capital in losses.
 - Expose the resulting quantities (impact per unit flow, reversion strength, current
   fundamental vs reference) so they can be tuned and observed.
 
@@ -35,6 +38,9 @@ Explicit non-goals for this change:
 - `order-flow-impact`: How trading moves the market — the transient and permanent impact of net
   aggressive flow on the latent fundamental value, its scaling by liquidity, and the reversion
   that tethers price to a reference.
+- `participant-risk-limits`: How a participant's trading is bounded by its equity — order sizing
+  as a fraction of equity, a risk floor below which a participant is stopped and flattened, and
+  the prevention of losses beyond the account's capital.
 
 ### Modified Capabilities
 
