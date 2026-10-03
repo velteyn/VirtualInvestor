@@ -88,6 +88,31 @@ public class RoundController {
     public record ControlRequest(String roundId, String action) {
     }
 
+    /**
+     * The warm-up history for a symbol in a running round, so the chart can load real bars
+     * instead of a placeholder. Times are UTC seconds.
+     */
+    @PostMapping(path = "/rounds/history", version = "1")
+    public List<BarResponse> history(@RequestBody HistoryRequest request) {
+        var round = game.runningRound(request.roundId());
+        if (round.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "unknown round: " + request.roundId());
+        }
+        var bars = round.get().history().get(request.symbol());
+        if (bars == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "unknown symbol: " + request.symbol());
+        }
+        return bars.stream()
+                .map(bar -> new BarResponse(bar.timeSec(), bar.open(), bar.high(), bar.low(), bar.close(), bar.volume()))
+                .toList();
+    }
+
+    public record HistoryRequest(String roundId, String symbol) {
+    }
+
+    public record BarResponse(long time, double open, double high, double low, double close, long volume) {
+    }
+
     public record SymbolSearchRequest(String query, int limit) {
     }
 

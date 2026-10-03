@@ -7,9 +7,9 @@
 
 ## 2. Live data feed in the terminal
 
-- [ ] 2.1 Bind `VirtualInvestorDataFeed` to server history (warm-up bars) for `getBars`; verify the chart loads real history for a running round.
-- [ ] 2.2 Drive live bar and depth updates from the stream; verify the chart and DOM ladder update as the market trades.
-- [ ] 2.3 Remove the seeded placeholder feed and confirm the chart still renders with live data only.
+- [x] 2.1 Bind `VirtualInvestorDataFeed` to server history (warm-up bars) for `getBars`; verify the chart loads real history for a running round.
+- [x] 2.2 Drive live bar and depth updates from the stream; verify the chart and DOM ladder update as the market trades.
+- [x] 2.3 Remove the seeded placeholder feed and confirm the chart still renders with live data only.
 
 ## 3. Trade tier and order routing
 

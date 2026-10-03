@@ -65,7 +65,7 @@ public final class WireMapper {
         if (payload instanceof WireMessage.PlaceOrderCommand place) {
             return new Command.PlaceOrder(
                     tokenOr(place.clientToken(), participantId, tick, "place"),
-                    participantId, place.symbol(), side(place.side()), type(place.type()),
+                    participantId, place.symbol(), side(place.side()), type(place.orderType()),
                     place.quantity(), place.price(), place.triggerPrice(), tick);
         }
         if (payload instanceof WireMessage.ModifyOrderCommand modify) {

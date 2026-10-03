@@ -102,6 +102,11 @@ public class GameService {
         return Optional.ofNullable(rounds.get(roundId));
     }
 
+    /** The live runtime round, when it is running. */
+    public Optional<com.virtualinvestor.runtime.RunningRound> runningRound(String roundId) {
+        return runtime.round(roundId);
+    }
+
     public List<Standing> leaderboard(String roundId, Map<String, Double> marks) {
         RoundView view = rounds.get(roundId);
         if (view == null) {

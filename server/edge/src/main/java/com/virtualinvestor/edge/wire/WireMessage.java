@@ -39,9 +39,12 @@ public interface WireMessage {
     interface Payload {
     }
 
-    /** A client request to place an order. */
+    /**
+     * A client request to place an order. The order type is `orderType` because the JSON
+     * discriminator already occupies the `type` key.
+     */
     @JsonTypeName("placeOrder")
-    record PlaceOrderCommand(String clientToken, String symbol, String side, String type, long quantity,
+    record PlaceOrderCommand(String clientToken, String symbol, String side, String orderType, long quantity,
                              double price, double triggerPrice) implements WireMessage.Payload {
     }
 

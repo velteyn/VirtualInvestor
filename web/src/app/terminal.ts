@@ -14,7 +14,7 @@ export interface Terminal {
 }
 
 export function mountTerminal(root: HTMLElement, client: ServerClient, round: RoundResponse): Terminal {
-  const dataFeed = new VirtualInvestorDataFeed(client);
+  const dataFeed = new VirtualInvestorDataFeed(client, round.roundId);
   const tradeFeed = new VirtualInvestorTradeFeed(client);
   const newsFeed = new VirtualInvestorNewsFeed(client);
 
