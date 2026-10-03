@@ -29,13 +29,19 @@ public class RoundRuntimeService {
 
     /** Create and start a round, running its loop in real time. */
     public RunningRound start(String roundId, long seed, LaunchConfig config, boolean runInRealTime) {
-        RunningRound round = new RunningRound(roundId, seed, config);
+        return start(roundId, seed, config, runInRealTime, RunningRound.DEFAULT_STEP_MILLIS);
+    }
+
+    /** As above, but with an explicit step size (tests use a large step for a short session). */
+    public RunningRound start(String roundId, long seed, LaunchConfig config, boolean runInRealTime, long stepMillis) {
+        RunningRound round = new RunningRound(roundId, seed, config, stepMillis);
         round.setPublisher(broadcaster);
         broadcaster.bindEngines(() -> round.engines().values().stream().toList());
         round.start();
         rounds.put(roundId, round);
         if (runInRealTime) {
-            RealTimeDriver driver = new RealTimeDriver(roundClock(round));
+            // Drive the ROUND's step (not the bare clock), so the world actually advances.
+            RealTimeDriver driver = new RealTimeDriver(round.clock(), round::stepQuietly);
             drivers.put(roundId, driver);
             driver.start();
         }
@@ -48,19 +54,13 @@ public class RoundRuntimeService {
 
     /** Pause a running round: its clock stops advancing. */
     public void pause(String roundId) {
-        RealTimeDriver driver = drivers.get(roundId);
-        if (driver != null) {
-            driver.pause();
-        }
+        rounds.get(roundId).pauseClock();
         rounds.get(roundId).lifecycle().transitionTo(RoundState.PAUSED);
     }
 
     public void resume(String roundId) {
         rounds.get(roundId).lifecycle().transitionTo(RoundState.RUNNING);
-        RealTimeDriver driver = drivers.get(roundId);
-        if (driver != null) {
-            driver.resume();
-        }
+        rounds.get(roundId).resumeClock();
     }
 
     /** Enqueue a client order command onto a running round. */
@@ -78,10 +78,5 @@ public class RoundRuntimeService {
         if (driver != null) {
             driver.close();
         }
-    }
-
-    /** The running round's clock, exposed for the driver. */
-    private static com.virtualinvestor.core.clock.WorldClock roundClock(RunningRound round) {
-        return round.clock();
     }
 }

@@ -37,6 +37,6 @@
 
 ## 7. Verification and docs
 
-- [ ] 7.1 Run a bot-only round on the server and verify prices move, books update, news fires and the leaderboard settles (headless integration test).
-- [ ] 7.2 Run a session where a client submits orders over the wire and verify fills, positions, account and settlement reflect them.
-- [ ] 7.3 Document the server runtime (loop, intake, streaming, recovery) in `docs/server-runtime.md`; verify the documented run commands start a live round.
+- [x] 7.1 Run a bot-only round on the server and verify prices move, books update, news fires and the leaderboard settles (headless integration test).
+- [x] 7.2 Run a session where a client submits orders over the wire and verify fills, positions, account and settlement reflect them.
+- [x] 7.3 Document the server runtime (loop, intake, streaming, recovery) in `docs/server-runtime.md`; verify the documented run commands start a live round.

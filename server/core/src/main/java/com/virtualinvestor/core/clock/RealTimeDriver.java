@@ -14,11 +14,21 @@ import java.util.concurrent.TimeUnit;
 public final class RealTimeDriver implements AutoCloseable {
 
     private final WorldClock clock;
+    private final Runnable tick;
     private final ScheduledExecutorService scheduler;
     private ScheduledFuture<?> task;
 
     public RealTimeDriver(WorldClock clock) {
+        this(clock, clock::step);
+    }
+
+    /**
+     * Drive {@code tick} every {@code clock.stepMillis()}. Use this when the world's own step
+     * (not the bare clock) must run each interval; the clock still gates state and timing.
+     */
+    public RealTimeDriver(WorldClock clock, Runnable tick) {
         this.clock = Objects.requireNonNull(clock, "clock");
+        this.tick = Objects.requireNonNull(tick, "tick");
         this.scheduler = Executors.newSingleThreadScheduledExecutor(runnable -> {
             Thread thread = new Thread(runnable, "vi-world-clock");
             thread.setDaemon(true);
@@ -26,13 +36,13 @@ public final class RealTimeDriver implements AutoCloseable {
         });
     }
 
-    /** Start the clock and step it every {@code stepMillis}. */
+    /** Start the clock and run the tick every {@code stepMillis}. */
     public synchronized void start() {
         if (task != null) {
             return;
         }
         clock.start();
-        task = scheduler.scheduleAtFixedRate(clock::step, 0L, clock.stepMillis(), TimeUnit.MILLISECONDS);
+        task = scheduler.scheduleAtFixedRate(tick, 0L, clock.stepMillis(), TimeUnit.MILLISECONDS);
     }
 
     /** Pause the clock while keeping the driver alive. */

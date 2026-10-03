@@ -210,6 +210,17 @@ public final class RunningRound {
         this.publisher = Objects.requireNonNull(publisher, "publisher");
     }
 
+    /**
+     * A safe driver entry point: advances one tick, silently doing nothing when the round has
+     * settled or is not running (so a scheduled driver does not throw at the close).
+     */
+    public void stepQuietly() {
+        if (settled || clock.state() != com.virtualinvestor.core.clock.WorldClock.State.RUNNING) {
+            return;
+        }
+        step();
+    }
+
     public void addListener(Consumer<List<GameEvent>> listener) {
         listeners.add(Objects.requireNonNull(listener, "listener"));
     }
@@ -524,6 +535,19 @@ public final class RunningRound {
 
     public WorldClock clock() {
         return clock;
+    }
+
+    /** Start the clock without the real-time driver (headless / test stepping). */
+    public void startClock() {
+        clock.start();
+    }
+
+    public void pauseClock() {
+        clock.pause();
+    }
+
+    public void resumeClock() {
+        clock.resume();
     }
 
     public long tick() {
