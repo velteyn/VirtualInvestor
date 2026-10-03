@@ -30,6 +30,7 @@ public interface WireMessage {
             @JsonSubTypes.Type(value = PlaceOrderCommand.class, name = "placeOrder"),
             @JsonSubTypes.Type(value = ModifyOrderCommand.class, name = "modifyOrder"),
             @JsonSubTypes.Type(value = CancelOrderCommand.class, name = "cancelOrder"),
+            @JsonSubTypes.Type(value = JoinRound.class, name = "joinRound"),
             @JsonSubTypes.Type(value = ResyncRequest.class, name = "resync"),
             @JsonSubTypes.Type(value = ResyncResult.class, name = "resyncResult"),
             @JsonSubTypes.Type(value = ServerHello.class, name = "hello"),
@@ -127,6 +128,11 @@ public interface WireMessage {
 
     /** A server event envelope: an optional sequence position plus a payload. */
     record Event(long seq, long tick, String type, Payload payload) {
+    }
+
+    /** Binds this socket to a round and participant, so commands route to that round. */
+    @JsonTypeName("joinRound")
+    record JoinRound(String roundId, String participantId) implements WireMessage.Payload {
     }
 
     /** A request to catch up from a sequence number after a dropped connection. */

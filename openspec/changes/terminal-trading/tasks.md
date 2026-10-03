@@ -2,8 +2,8 @@
 
 ## 1. WebSocket order dispatch (closes market-microstructure 6.2)
 
-- [ ] 1.1 Route inbound `placeOrder`/`modifyOrder`/`cancelOrder` in `GameWebSocketHandler` to `RoundRuntimeService` for the round's human participant; verify a WebSocket integration test that a sent command is queued on the round.
-- [ ] 1.2 Stream the resulting order and fill events back to the sender through the existing broadcast; verify the sender receives its order events.
+- [x] 1.1 Route inbound `placeOrder`/`modifyOrder`/`cancelOrder` in `GameWebSocketHandler` to `RoundRuntimeService` for the round's human participant; verify a WebSocket integration test that a sent command is queued on the round.
+- [x] 1.2 Stream the resulting order and fill events back to the sender through the existing broadcast; verify the sender receives its order events.
 
 ## 2. Live data feed in the terminal
 
