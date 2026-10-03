@@ -30,5 +30,5 @@
 
 ## 6. Verification against the live market
 
-- [ ] 6.1 Run a bot-only round on the server with impact enabled and verify the market still moves, ranks reorder, and settlement completes; compare rival outcomes with the pre-change run.
+- [x] 6.1 Run a bot-only round on the server with impact enabled and verify the market still moves, ranks reorder, and settlement completes; compare rival outcomes with the pre-change run.
 - [ ] 6.2 Run a round where a client submits a large order over the wire and verify the traded price and the fundamental both move and partially persist.
