@@ -8,9 +8,9 @@
 
 ## 2. Flow signal from the runtime
 
-- [ ] 2.1 Accumulate net aggressive flow per instrument per tick where fills are applied in `RunningRound`; verify a test that net buy flow is positive and net sell negative for a scripted set of fills.
-- [ ] 2.2 Apply the impact each tick before bots act, so bots see and react to the moved fundamental; verify a test that a large player order changes the fundamental the bots then quote around.
-- [ ] 2.3 Ensure market makers re-quote to the moved fundamental rather than a stale one; verify a test that the best quote tracks the fundamental after a large flow.
+- [x] 2.1 Accumulate net aggressive flow per instrument per tick where fills are applied in `RunningRound`; verify a test that net buy flow is positive and net sell negative for a scripted set of fills.
+- [x] 2.2 Apply the impact each tick before bots act, so bots see and react to the moved fundamental; verify a test that a large player order changes the fundamental the bots then quote around.
+- [x] 2.3 Ensure market makers re-quote to the moved fundamental rather than a stale one; verify a test that the best quote tracks the fundamental after a large flow.
 
 ## 3. Determinism and safety
 

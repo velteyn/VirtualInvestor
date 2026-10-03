@@ -66,6 +66,11 @@ public final class RunningRound {
     private static final double VOLATILITY_DECAY = 0.99;
     private static final long QUOTE_REFRESH_TICKS = 50L;
     private static final long RANDOM_NEWS_TICKS = 1500L;
+    // Order-flow impact and reversion (tunable; see docs/calibration.md).
+    private static final double PERMANENT_IMPACT = 0.00002;
+    private static final double TRANSIENT_IMPACT = 0.00008;
+    private static final double TRANSIENT_DECAY = 0.97;
+    private static final double REVERSION_STRENGTH = 0.02;
 
     private final String roundId;
     private final long seed;
@@ -96,6 +101,10 @@ public final class RunningRound {
     private final Map<String, ShortSalePolicy> shortPolicies = new LinkedHashMap<>();
     private final List<Consumer<List<GameEvent>>> listeners = new ArrayList<>();
     private final java.util.Set<String> processedCommands = new java.util.LinkedHashSet<>();
+    /** Net aggressive flow accumulated this tick, per instrument (positive buy, negative sell). */
+    private final Map<String, Double> netFlow = new LinkedHashMap<>();
+    /** Cumulative net flow since the round began, per instrument (for observation/tuning). */
+    private final Map<String, Double> cumulativeFlow = new LinkedHashMap<>();
 
     private WorldJournal journal = WorldJournal.noop();
     private EventPublisher publisher = EventPublisher.noop();
@@ -126,6 +135,15 @@ public final class RunningRound {
                 universe, streams, MARKET_ANNUAL_VOL, SECTOR_ANNUAL_VOL, stepMillis, YEAR_MILLIS);
         this.volatility = new VolatilityState(VOLATILITY_DECAY);
         fundamentals.setVolatilityState(volatility);
+        // Order-flow impact (design D1-D4): trading moves the latent fundamental, scaled by
+        // liquidity (free float), with a reversion pull so the market stays tethered.
+        Map<String, Double> liquidity = new LinkedHashMap<>();
+        for (Instrument instrument : universe.all()) {
+            liquidity.put(instrument.ticker(), Math.max(1.0, instrument.freeFloat() * 1_000_000.0));
+        }
+        fundamentals.setOrderFlowImpact(new com.virtualinvestor.core.fundamental.OrderFlowImpact(
+                PERMANENT_IMPACT, TRANSIENT_IMPACT, TRANSIENT_DECAY, liquidity));
+        fundamentals.setReversionStrength(REVERSION_STRENGTH);
 
         this.engines = new LinkedHashMap<>();
         this.previousPrices = new LinkedHashMap<>();
@@ -297,6 +315,17 @@ public final class RunningRound {
         volatility.step();
         events.add(new GameEvent.Tick(tick, clock.logicalMillis()));
 
+        // Order-flow impact: apply the flow accumulated since the last tick (player commands
+        // plus the previous tick's bot trades), then clear it. Bots this tick see and quote
+        // around the moved fundamental.
+        for (Map.Entry<String, Double> entry : netFlow.entrySet()) {
+            if (entry.getValue() != 0.0) {
+                fundamentals.applyFlow(entry.getKey(), entry.getValue());
+            }
+        }
+        netFlow.clear();
+
+
         for (SessionTransition transition : session.advance(tick)) {
             handleTransition(transition, tick, events);
         }
@@ -396,12 +425,17 @@ public final class RunningRound {
         clock.stop();
     }
 
-    /** Credit both counterparties of a fill before the event is published. */
+    /** Credit both counterparties of a fill and record its aggressive flow. */
     private void applyFill(com.virtualinvestor.core.book.Fill fill, String symbol) {
         participant(fill.takerParticipantId()).account()
                 .applyFill(symbol, fill.takerSide(), fill.quantity(), fill.price());
         participant(fill.makerParticipantId()).account()
                 .applyFill(symbol, fill.makerSide(), fill.quantity(), fill.price());
+        // The taker is the aggressor: buy flow positive, sell flow negative.
+        double signed = fill.takerSide() == com.virtualinvestor.core.domain.OrderSide.BUY
+                ? fill.quantity() : -fill.quantity();
+        netFlow.merge(symbol, signed, Double::sum);
+        cumulativeFlow.merge(symbol, signed, Double::sum);
     }
 
     private static List<GameEvent> rejected(Command.PlaceOrder place, String reason, long tick) {
@@ -505,6 +539,21 @@ public final class RunningRound {
 
     public Map<String, CircuitBreaker> breakers() {
         return breakers;
+    }
+
+    /** The current net aggressive flow accrued this tick (for observation/tests). */
+    public Map<String, Double> netFlow() {
+        return Map.copyOf(netFlow);
+    }
+
+    /** Cumulative net aggressive flow since the round began (for observation/tuning). */
+    public Map<String, Double> cumulativeFlow() {
+        return Map.copyOf(cumulativeFlow);
+    }
+
+    /** The gap between an instrument's fundamental and its reference (impact vs anchor). */
+    public double fundamentalGap(String symbol) {
+        return fundamentals.fundamental(symbol) - fundamentals.reference(symbol);
     }
 
     public Map<String, MarketRules> marketRules() {

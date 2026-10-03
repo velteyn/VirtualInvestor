@@ -48,7 +48,7 @@ public final class OrderFlowImpact {
 
     /** An inert impact (no effect) for tests and for disabling the feature. */
     public static OrderFlowImpact inert() {
-        return new OrderFlowImpact(0.0, 0.0, 1.0, Map.of());
+        return new OrderFlowImpact(0.0, 0.0, 1.0, new LinkedHashMap<>());
     }
 
     /**
