@@ -47,7 +47,11 @@ class RunningRoundTest {
     void queuedCommandsAreAppliedInOrderAtTheTopOfTheTick() {
         RunningRound round = round(7L);
         round.start();
-        double farBelow = round.fundamentals().fundamental("NVDO") * 0.5;
+        for (int i = 0; i < 4; i++) {
+            round.step();
+        }
+        assertEquals(com.virtualinvestor.core.domain.SessionPhase.CONTINUOUS, round.session().phase());
+        double farBelow = Math.round(round.fundamentals().fundamental("NVDO") * 0.5 * 100.0) / 100.0;
 
         round.enqueue(new Command.PlaceOrder("cmd-1", "human", "NVDO", OrderSide.BUY, OrderType.LIMIT, 10L, farBelow, 0.0, 0L));
         round.enqueue(new Command.PlaceOrder("cmd-2", "human", "NVDO", OrderSide.BUY, OrderType.LIMIT, 10L, farBelow, 0.0, 0L));
@@ -55,8 +59,10 @@ class RunningRoundTest {
         List<GameEvent> events = round.step();
 
         List<String> accepted = events.stream()
-                .filter(GameEvent.OrderAccepted.class::isInstance)
-                .map(event -> ((GameEvent.OrderAccepted) event).orderId())
+                .filter(GameEvent.OrderReport.class::isInstance)
+                .map(GameEvent.OrderReport.class::cast)
+                .filter(report -> report.event() == com.virtualinvestor.core.domain.OrderEventKind.NEW)
+                .map(GameEvent.OrderReport::orderId)
                 .toList();
         assertEquals(List.of("cmd-1", "cmd-2"), accepted.subList(0, 2),
                 "queued commands apply first, in enqueue order");

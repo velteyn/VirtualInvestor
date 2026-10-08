@@ -35,12 +35,36 @@ A round SHALL progress through defined states — created, warm-up, running, clo
 
 ### Requirement: Participant model
 
-Every trader — the human player, each rival bot, and each institution — SHALL be a participant subject to identical market rules, and a participant SHALL be either human or virtual.
+Every trader — each human player, each rival bot, and each institution — SHALL
+be a registered player identity, human or virtual, trading through a chosen
+bank, and SHALL be subject to identical market rules and identical broker
+fees. A round SHALL seat up to 6 ranked humans in join order, backfilling
+unclaimed seats first-N by roster order.
 
 #### Scenario: Bots obey the same rules
 
 - **WHEN** a rival bot places an order
 - **THEN** it is validated and matched under the same rules as the human player's orders
+
+#### Scenario: Bots pay the same fees
+
+- **WHEN** a bot's fill executes
+- **THEN** its bank schedule deducts the identical fee a human would pay on that fill
+
+#### Scenario: Unregistered play impossible
+
+- **WHEN** a socket without an approved identity attempts to trade
+- **THEN** its commands are refused
+
+#### Scenario: Second human sits with the bots
+
+- **WHEN** two approved humans hold seats in one round
+- **THEN** both trade, rank and settle as distinct participants under identical rules
+
+#### Scenario: Backfill preserves the solo game
+
+- **WHEN** one human plays alone
+- **THEN** the ranked roster is that human plus the five named rivals, as before
 
 ### Requirement: Visible rival bots
 
@@ -67,7 +91,9 @@ The system SHALL include institutional participants that provide liquidity and r
 
 ### Requirement: Fair ranking
 
-The system SHALL seed rival bots with the same starting capital the player selected so that final standing by absolute equity is fair, and SHALL also report each participant's return on starting capital.
+The system SHALL seed rival bots with the same starting capital the player
+selected and SHALL rank by equity net of all broker fees, and SHALL also
+report each participant's return on starting capital.
 
 #### Scenario: Bots mirror the stake
 
@@ -78,6 +104,16 @@ The system SHALL seed rival bots with the same starting capital the player selec
 
 - **WHEN** the leaderboard is displayed
 - **THEN** each participant shows both current equity and return on starting capital
+
+#### Scenario: Equal footing at the open
+
+- **WHEN** a round starts
+- **THEN** every ranked participant holds the same starting capital at the same bank terms or better
+
+#### Scenario: Ranking reflects net wealth
+
+- **WHEN** the round settles
+- **THEN** the winner is the highest equity after fees, with returns shown per participant
 
 ### Requirement: Margin calls and liquidation
 

@@ -5,7 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import com.virtualinvestor.core.command.Command;
 import com.virtualinvestor.core.domain.NewsScope;
 import com.virtualinvestor.core.domain.NewsStage;
+import com.virtualinvestor.core.domain.OrderEventKind;
 import com.virtualinvestor.core.domain.OrderSide;
+import com.virtualinvestor.core.domain.OrderStatus;
 import com.virtualinvestor.core.domain.OrderType;
 import com.virtualinvestor.core.domain.SessionPhase;
 import com.virtualinvestor.core.event.GameEvent;
@@ -25,13 +27,22 @@ class CommandEventCodecTest {
             new Command.JoinRound("cmd-8", "round-1", "part-1", false),
             new Command.Reconnect("cmd-9", "round-1", "part-1", "token-xyz"),
             new GameEvent.Tick(1L, 100L),
-            new GameEvent.OrderAccepted("ord-1", "part-1", "ACME", 1L),
-            new GameEvent.OrderRejected("ord-1", "part-1", "ACME", "bad price", 2L),
-            new GameEvent.OrderRested("ord-1", "ACME", 42.5, 100L, 3L),
-            new GameEvent.OrderTriggered("ord-1", "ACME", 41.0, 4L),
-            new GameEvent.OrderPartiallyFilled("ord-1", "ACME", 42.5, 40L, 5L),
-            new GameEvent.OrderFilled("ord-1", "ACME", 42.5, 100L, 6L),
-            new GameEvent.OrderCancelled("ord-1", "ACME", "user", 7L),
+            new GameEvent.OrderReport("ord-1", "part-1", "ACME", OrderSide.BUY, OrderType.LIMIT, 100L, 42.5,
+                    0L, 100L, OrderStatus.WORKING, OrderEventKind.NEW, null, 1L),
+            new GameEvent.OrderReport("ord-1", "part-1", "ACME", OrderSide.BUY, OrderType.LIMIT, 100L, 42.5,
+                    0L, 100L, OrderStatus.REJECTED, OrderEventKind.REJECTED, "bad price", 2L),
+            new GameEvent.OrderReport("ord-1", "part-1", "ACME", OrderSide.BUY, OrderType.LIMIT, 100L, 42.5,
+                    0L, 100L, OrderStatus.WORKING, OrderEventKind.RESTED, null, 3L),
+            new GameEvent.OrderReport("ord-1", "part-1", "ACME", OrderSide.SELL, OrderType.STOP, 100L, 41.0,
+                    0L, 100L, OrderStatus.WORKING, OrderEventKind.TRIGGERED, null, 4L),
+            new GameEvent.OrderReport("ord-1", "part-1", "ACME", OrderSide.BUY, OrderType.LIMIT, 100L, 42.5,
+                    40L, 60L, OrderStatus.PARTIAL, OrderEventKind.PARTIAL_FILL, null, 5L),
+            new GameEvent.OrderReport("ord-1", "part-1", "ACME", OrderSide.BUY, OrderType.LIMIT, 100L, 42.5,
+                    100L, 0L, OrderStatus.FILLED, OrderEventKind.FILL, null, 6L),
+            new GameEvent.OrderReport("ord-1", "part-1", "ACME", OrderSide.BUY, OrderType.LIMIT, 100L, 42.5,
+                    0L, 100L, OrderStatus.CANCELLED, OrderEventKind.CANCELLED, "user", 7L),
+            new GameEvent.PositionUpdated("part-1", "ACME", 40L, 42.5, 0.0, 8L),
+            new GameEvent.AccountUpdated("part-1", 98_320.0, 0.0, 4.0, 8L),
             new GameEvent.RoundCreated("round-1", 123456789L, 100_000L, 18_000L, "realistic", 0L),
             new GameEvent.WarmupComplete("round-1", 100L),
             new GameEvent.AuctionOpened("ACME", SessionPhase.OPENING_AUCTION, 10L),

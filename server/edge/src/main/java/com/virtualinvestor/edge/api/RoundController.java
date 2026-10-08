@@ -4,6 +4,9 @@ import com.virtualinvestor.core.game.LaunchConfig;
 import com.virtualinvestor.core.participant.Standing;
 import com.virtualinvestor.core.rules.RealismPreset;
 import com.virtualinvestor.edge.game.GameService;
+import com.virtualinvestor.edge.wire.WireMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
@@ -23,6 +26,8 @@ import org.springframework.web.server.ResponseStatusException;
 @RequestMapping("/api")
 public class RoundController {
 
+    private static final Logger log = LoggerFactory.getLogger(RoundController.class);
+
     private final GameService game;
 
     public RoundController(GameService game) {
@@ -30,7 +35,7 @@ public class RoundController {
     }
 
     public record CreateRoundRequest(
-            double startingCapital, long durationMinutes, String preset) {
+            double startingCapital, long durationMinutes, String preset, String sessionToken) {
     }
 
     public record RoundResponse(
@@ -53,7 +58,15 @@ public class RoundController {
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         }
-        GameService.RoundView round = game.createRound(config);
+        // An approved login token links the round to the player's purse; without
+        // one the round runs anonymous exactly as before.
+        String playerId = null;
+        if (request.sessionToken() != null && !request.sessionToken().isBlank()) {
+            playerId = game.players().playerForToken(request.sessionToken()).orElse(null);
+        }
+        GameService.RoundView round = game.createRound(config, playerId, true);
+        log.info("createRound {} player={} capital={} minutes={} preset={}", round.roundId(), playerId,
+                request.startingCapital(), request.durationMinutes(), request.preset());
         return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(round));
     }
 
@@ -108,6 +121,48 @@ public class RoundController {
     }
 
     public record HistoryRequest(String roundId, String symbol) {
+    }
+
+    /**
+     * Fill history for one participant (portfolio-tab 2.1): one row per filled
+     * order with cumulative quantity, last price and fee, folded from the journal.
+     */
+    @PostMapping(path = "/rounds/fills", version = "1")
+    public List<WireMessage.FillDto> fills(@RequestBody FillsRequest request) {
+        try {
+            return game.fills(request.roundId(), request.participantId()).stream()
+                    .map(row -> new WireMessage.FillDto(row.orderId(), row.symbol(), row.side(),
+                            row.orderType(), row.quantity(), row.filledQuantity(), row.price(), row.fee(),
+                            row.tick()))
+                    .toList();
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
+        }
+    }
+
+    public record FillsRequest(String roundId, String participantId) {
+    }
+
+    /**
+     * Per-fill markouts for one participant (realistic-liquidity 4.1): each fill
+     * joined to the first print at or past fill tick + horizon, so execution
+     * quality is measurable over the wire. A missing or non-positive horizon
+     * falls back to the server default (5 ticks).
+     */
+    @PostMapping(path = "/rounds/markouts", version = "1")
+    public List<WireMessage.MarkoutDto> markouts(@RequestBody MarkoutsRequest request) {
+        try {
+            return game.markouts(request.roundId(), request.participantId(),
+                            request.horizonTicks() == null ? 0L : request.horizonTicks()).stream()
+                    .map(row -> new WireMessage.MarkoutDto(row.orderId(), row.symbol(), row.side(),
+                            row.fillPrice(), row.markPrice(), row.markout(), row.fillTick(), row.markTick()))
+                    .toList();
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
+        }
+    }
+
+    public record MarkoutsRequest(String roundId, String participantId, Long horizonTicks) {
     }
 
     public record BarResponse(long time, double open, double high, double low, double close, long volume) {

@@ -49,8 +49,9 @@ class SessionLifecycleTest {
         round.enqueue(new Command.PlaceOrder("cmd-1", "human", "NVDO", OrderSide.BUY, OrderType.LIMIT, 10L, 1.0, 0.0, 0L));
         List<GameEvent> events = round.step();
 
-        assertTrue(events.stream().anyMatch(e -> e instanceof GameEvent.OrderRejected
-                && ((GameEvent.OrderRejected) e).reason().contains("not in continuous")),
+        assertTrue(events.stream().anyMatch(e -> e instanceof GameEvent.OrderReport r
+                && r.event() == com.virtualinvestor.core.domain.OrderEventKind.REJECTED
+                && r.reason().contains("not in continuous")),
                 "a pre-open order must be refused");
     }
 
@@ -67,10 +68,12 @@ class SessionLifecycleTest {
         round.enqueue(new Command.PlaceOrder("cmd-2", "human", "NVDO", OrderSide.BUY, OrderType.LIMIT, 10L, farBelow, 0.0, 0L));
         List<GameEvent> events = round.step();
 
-        assertTrue(events.stream().anyMatch(e -> e instanceof GameEvent.OrderRested
-                && ((GameEvent.OrderRested) e).orderId().equals("cmd-2")), "the order should rest");
-        assertFalse(events.stream().anyMatch(e -> e instanceof GameEvent.OrderRejected
-                && ((GameEvent.OrderRejected) e).orderId().equals("cmd-2")));
+        assertTrue(events.stream().anyMatch(e -> e instanceof GameEvent.OrderReport r
+                && r.event() == com.virtualinvestor.core.domain.OrderEventKind.RESTED
+                && r.orderId().equals("cmd-2")), "the order should rest");
+        assertFalse(events.stream().anyMatch(e -> e instanceof GameEvent.OrderReport r
+                && r.event() == com.virtualinvestor.core.domain.OrderEventKind.REJECTED
+                && r.orderId().equals("cmd-2")));
     }
 
     @Test

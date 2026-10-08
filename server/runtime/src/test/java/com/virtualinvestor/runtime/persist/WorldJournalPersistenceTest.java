@@ -75,15 +75,20 @@ class WorldJournalPersistenceTest {
 
         List<SequencedEvent> stored = log.readFrom(1L);
         assertTrue(stored.size() > 0, "events should be persisted");
-        for (int i = 0; i < stored.size(); i++) {
-            assertEquals(i + 1L, stored.get(i).seq(), "sequence is contiguous");
+        for (int i = 1; i < stored.size(); i++) {
+            assertEquals(stored.get(i - 1).seq() + 1L, stored.get(i).seq(), "sequence is contiguous");
         }
         // A snapshot was written by the cadence, so recovery does not replay from scratch.
         assertTrue(snapshots.latest().isPresent(), "a checkpoint should exist");
 
-        // Recovery from snapshot + later events equals the full log.
+        // Recovery from snapshot + tail equals the snapshotted prefix plus the tail,
+        // even though the log itself now holds only the tail (compaction). The
+        // boundary row lives in both, so it counts once.
         List<GameEvent> recovered = com.virtualinvestor.persist.snapshot.Recovery.recover(log, snapshots);
-        List<GameEvent> fullLog = stored.stream().map(SequencedEvent::event).toList();
-        assertEquals(fullLog, recovered);
+        List<GameEvent> prefix = com.virtualinvestor.persist.snapshot.WorldStateCodec.decode(
+                snapshots.latest().orElseThrow().state());
+        List<GameEvent> tail = stored.stream().map(SequencedEvent::event).toList();
+        assertEquals(prefix.size() + tail.size() - 1, recovered.size());
+        assertEquals(tail.subList(1, tail.size()), recovered.subList(prefix.size(), recovered.size()));
     }
 }

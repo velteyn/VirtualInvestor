@@ -36,12 +36,13 @@ public final class WireMapper {
     }
 
     public static WireMessage.AccountDto account(Account account) {
-        return new WireMessage.AccountDto(account.participantId(), account.cash(), account.realizedPnl());
+        return new WireMessage.AccountDto(
+                account.participantId(), account.cash(), account.realizedPnl(), account.feesPaid());
     }
 
     public static WireMessage.PositionDto position(String participantId, Position position) {
         return new WireMessage.PositionDto(
-                participantId, position.ticker(), position.netQty(), position.avgPrice());
+                participantId, position.ticker(), position.netQty(), position.avgPrice(), position.realized());
     }
 
     public static WireMessage.DepthDto depth(String symbol, List<DepthLevel> bids, List<DepthLevel> asks,

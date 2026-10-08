@@ -57,6 +57,25 @@ class RoundRecoveryServiceTest {
     }
 
     @Test
+    void checkpointPrunesTheConsumedPrefixButRecoveryStaysWhole() {
+        JdbcEventLog log = log();
+        JdbcSnapshotStore snapshots = new JdbcSnapshotStore(dataSource, ROUND);
+        BatchedEventLogWriter writer = new BatchedEventLogWriter(log, 100);
+        writer.appendAll(List.of(
+                new GameEvent.SessionOpened(ROUND, 1L),
+                new GameEvent.Tick(2L, 200L),
+                new GameEvent.TradePrinted("ACME", 100.0, 10L, OrderSide.BUY, 2L)));
+        writer.flush();
+
+        new RoundRecoveryService(log, snapshots, writer).checkpoint(2L);
+
+        assertEquals(1, log.readFrom(1L).size(), "only the boundary row stays for numbering");
+        RoundRecoveryService.RecoveryResult result = new RoundRecoveryService(
+                log(), snapshots, new BatchedEventLogWriter(log(), 100)).recover();
+        assertEquals(3, result.history().size(), "snapshot still carries the prefix");
+    }
+
+    @Test
     void restartMidRoundRecoversWithoutLossOrDuplication() {
         JdbcEventLog log = log();
         JdbcSnapshotStore snapshots = new JdbcSnapshotStore(dataSource, ROUND);
@@ -80,13 +99,14 @@ class RoundRecoveryServiceTest {
         assertEquals(3L, result.recoveredTick(), "clock resumes at the recovered tick");
         assertEquals(RoundState.RUNNING, result.state());
 
-        // Continue after recovery and confirm the log stays contiguous.
+        // Continue after recovery and confirm the log stays contiguous (it need
+        // not restart at 1: checkpoints compact the consumed prefix).
         BatchedEventLogWriter after = new BatchedEventLogWriter(log(), 100);
         after.append(new GameEvent.Tick(4L, 400L));
         after.flush();
         List<SequencedEvent> all = log().readFrom(1L);
-        for (int i = 0; i < all.size(); i++) {
-            assertEquals(i + 1L, all.get(i).seq());
+        for (int i = 1; i < all.size(); i++) {
+            assertEquals(all.get(i - 1).seq() + 1L, all.get(i).seq());
         }
     }
 

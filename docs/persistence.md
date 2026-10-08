@@ -27,6 +27,12 @@ Snapshots bound recovery cost so a restart never replays from tick zero.
   first N events", snapshots are compact and codec-consistent with the log.
 - Recommended cadence: every ~10 seconds or every N thousand events, whichever comes first
   (a pure tradeoff; no architecture change).
+- Each checkpoint compacts the consumed prefix (`DELETE ... WHERE seq < snapshot seq`,
+  keeping one boundary row so numbering never restarts into reuse) — without this,
+  every checkpoint re-reads the whole history and stalls the tick past ~600 ticks.
+  Round ids carry a per-boot tag (`round-N-ab12`) so restarts never collide with
+  old rows. A failed checkpoint logs loudly and skips: persistence never kills
+  the market.
 
 ## Recovery
 

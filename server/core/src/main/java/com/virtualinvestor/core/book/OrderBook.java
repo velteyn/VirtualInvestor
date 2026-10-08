@@ -81,6 +81,11 @@ public final class OrderBook {
         return byId.get(orderId);
     }
 
+    /** All resting orders, insertion order preserved (used for reconnect snapshots). */
+    public List<RestingOrder> orders() {
+        return List.copyOf(byId.values());
+    }
+
     public int orderCount() {
         return byId.size();
     }

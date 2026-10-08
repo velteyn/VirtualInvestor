@@ -47,14 +47,24 @@ public class RoundBroadcaster implements EventPublisher {
                         news.newsId(), news.source(), news.scope().name(), news.symbol(), news.sector(),
                         news.headline(), news.body(), news.magnitude(), news.durationTicks(),
                         news.stage().name(), news.tick()));
-            } else if (event instanceof GameEvent.OrderFilled filled) {
+            } else if (event instanceof GameEvent.BarClosed bar) {
+                broadcaster.broadcast(new WireMessage.BarDto(
+                        bar.symbol(), bar.interval(), bar.barTime(), bar.open(), bar.high(),
+                        bar.low(), bar.close(), bar.volume()));
+            } else if (event instanceof GameEvent.PositionUpdated position) {
+                broadcaster.broadcast(new WireMessage.PositionDto(position.participantId(), position.symbol(),
+                        position.netQty(), position.avgPrice(), position.realized()));
+            } else if (event instanceof GameEvent.AccountUpdated account) {
+                broadcaster.broadcast(new WireMessage.AccountDto(account.participantId(), account.cash(),
+                        account.realizedPnl(), account.feesPaid()));
+            } else if (event instanceof GameEvent.OrderReport report) {
+                // A self-contained order frame, modelled on FIX ExecutionReport: identity plus
+                // running fill state, so the terminal can rebuild its working-order book.
                 broadcaster.broadcast(new WireMessage.OrderDto(
-                        filled.orderId(), "", filled.symbol(), "", "", filled.filledQuantity(),
-                        filled.price(), 0.0, "FILLED", filled.filledQuantity(), filled.tick()));
-            } else if (event instanceof GameEvent.OrderPartiallyFilled partial) {
-                broadcaster.broadcast(new WireMessage.OrderDto(
-                        partial.orderId(), "", partial.symbol(), "", "", partial.filledQuantity(),
-                        partial.price(), 0.0, "PARTIAL", partial.filledQuantity(), partial.tick()));
+                        report.orderId(), report.participantId(), report.symbol(),
+                        report.side().name(), report.orderType().name(), report.quantity(),
+                        report.price(), 0.0, report.status().name(), report.filledQuantity(),
+                        report.reason(), report.tick()));
             }
         }
     }

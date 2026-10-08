@@ -18,6 +18,8 @@ public final class Account {
 
     private double cash;
     private double realizedPnl;
+    private double feesPaid;
+    private final Map<String, Double> realizedBySymbol = new LinkedHashMap<>();
 
     public Account(String participantId, double openingCash) {
         this.participantId = Objects.requireNonNull(participantId, "participantId");
@@ -37,6 +39,30 @@ public final class Account {
 
     public double realizedPnl() {
         return realizedPnl;
+    }
+
+    /** Broker fees paid (player-accounts 4.2/5.1): deducted from cash per execution. */
+    public double feesPaid() {
+        return feesPaid;
+    }
+
+    /** Realized P&L attributed to one symbol (portfolio-tab 1.1); zero when never closed. */
+    public double realizedFor(String ticker) {
+        return realizedBySymbol.getOrDefault(ticker, 0.0);
+    }
+
+    /** Per-symbol realized map, for purse write-back (portfolio-tab 1.2). */
+    public Map<String, Double> realizedBySymbol() {
+        return Collections.unmodifiableMap(realizedBySymbol);
+    }
+
+    /** Deduct a broker fee from cash and accumulate it visibly. */
+    public void debitFee(double fee) {
+        if (fee < 0.0 || !Double.isFinite(fee)) {
+            throw new IllegalArgumentException("fee must be a finite non-negative amount");
+        }
+        cash -= fee;
+        feesPaid += fee;
     }
 
     public Position position(String ticker) {
@@ -74,7 +100,11 @@ public final class Account {
             long closing = Math.abs(signed);
             boolean longPosition = netQty > 0L;
             long closed = Math.min(existing, closing);
-            realizedPnl += (longPosition ? (price - avgPrice) : (avgPrice - price)) * closed;
+            double booked = (longPosition ? (price - avgPrice) : (avgPrice - price)) * closed;
+            realizedPnl += booked;
+            // Per-symbol attribution moves at exactly the same site as the lump sum,
+            // so the two can never diverge (portfolio-tab 1.1).
+            realizedBySymbol.merge(ticker, booked, Double::sum);
             newNetQty = netQty + signed;
             if (newNetQty == 0L) {
                 newAvgPrice = 0.0;
@@ -89,7 +119,8 @@ public final class Account {
         if (newNetQty == 0L) {
             positions.remove(ticker);
         } else {
-            positions.put(ticker, new Position(ticker, newNetQty, newAvgPrice));
+            positions.put(ticker,
+                    new Position(ticker, newNetQty, newAvgPrice, realizedBySymbol.getOrDefault(ticker, 0.0)));
         }
     }
 

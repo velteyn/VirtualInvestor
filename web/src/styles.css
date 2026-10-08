@@ -101,11 +101,257 @@ body,
   overflow-y: auto;
 }
 
-.vi-positions {
+.vi-dock {
   grid-area: positions;
-  padding: 6px 10px;
   background: #101218;
   border-top: 1px solid #232838;
+}
+
+.vi-positions {
+  padding: 6px 10px;
+}
+
+.vi-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 6px 10px 0;
+}
+
+.vi-tabs button {
+  padding: 4px 14px;
+  background: transparent;
+  color: #c7ccd8;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.vi-tabs button.vi-active {
+  background: #1c2030;
+  border-color: #2a3046;
+  font-weight: 600;
+}
+
+.vi-tab {
+  padding: 6px 10px 10px;
+}
+
+.vi-pf-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 28px;
+  padding: 10px 2px 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.vi-pf-equity {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-right: 8px;
+}
+
+.vi-pf-equity b {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.vi-pf-equity span {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.vi-pf-head label {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+
+.vi-pf-stat {
+  min-width: 72px;
+}
+
+.vi-pf-stat span {
+  font-size: 14px;
+}
+
+.vi-pf-count {
+  opacity: 0.55;
+  font-weight: 400;
+}
+
+.vi-pf-table {
+  width: 100%;
+  margin: 4px 0 12px;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.vi-pf-table th,
+.vi-pf-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #1c2030;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.vi-pf-table th {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.55;
+  white-space: nowrap;
+}
+
+.vi-pf-table td.vi-num,
+.vi-pf-table th.vi-num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.vi-pf-table tbody tr:hover td {
+  background: #161b28;
+}
+
+.vi-pf-table td.vi-sym {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.vi-pf-table td.vi-oid {
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.vi-pf-table td.vi-empty {
+  padding: 14px 8px;
+  text-align: center;
+  opacity: 0.5;
+}
+
+.vi-pf-table td.vi-act {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.vi-side-buy,
+.vi-side-sell {
+  display: inline-block;
+  min-width: 44px;
+  padding: 1px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: 0.04em;
+}
+
+.vi-side-buy {
+  background: rgba(38, 166, 154, 0.15);
+  color: #26a69a;
+}
+
+.vi-side-sell {
+  background: rgba(239, 83, 80, 0.15);
+  color: #ef5350;
+}
+
+.vi-st-working,
+.vi-st-partial,
+.vi-st-done {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.vi-st-working {
+  background: rgba(240, 160, 32, 0.15);
+  color: #f0a020;
+}
+
+.vi-st-partial {
+  background: rgba(38, 166, 154, 0.15);
+  color: #26a69a;
+}
+
+.vi-st-done {
+  background: #1c2030;
+  color: #c7ccd8;
+}
+
+.vi-pf-table button,
+.vi-tab button {
+  width: auto;
+  padding: 3px 10px;
+  background: #1c2030;
+  color: #c7ccd8;
+  border: 1px solid #2a3046;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.vi-pf-table button:hover,
+.vi-tab button:hover {
+  background: #252c42;
+  border-color: #3a4562;
+}
+
+.vi-pf-table td.vi-act button[data-close]:hover,
+.vi-pf-table td.vi-act button[data-cancel]:hover {
+  border-color: #ef5350;
+  color: #ef5350;
+}
+
+@media (max-width: 640px) {
+  /* Wide tables (holdings: 10 columns) scroll horizontally instead of
+     squeezing unreadably on phones; the first column sticks so rows keep
+     their identity while scrolling. The tab itself stacks as usual. */
+  .vi-pf-table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  .vi-pf-table th:first-child,
+  .vi-pf-table td:first-child {
+    position: sticky;
+    left: 0;
+    background: #101218;
+  }
+
+  .vi-pf-table tbody tr:hover td:first-child {
+    background: #161b28;
+  }
+
+  .vi-pf-head {
+    gap: 6px 20px;
+  }
+
+  .vi-pf-equity b {
+    font-size: 19px;
+  }
+}
+
+.vi-pf-table h2,
+.vi-tab h2 {
+  margin: 12px 0 4px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.55;
 }
 
 .vi-positions h2,
@@ -180,6 +426,103 @@ body,
   color: #ef5350;
 }
 
+/* ── order ticket ─────────────────────────────────────────────────────── */
+.vi-ticket label {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 13px;
+  opacity: 0.85;
+}
+
+.vi-ticket input,
+.vi-ticket select {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: #1c2030;
+  color: #c7ccd8;
+  border: 1px solid #2a3046;
+  border-radius: 6px;
+  font: inherit;
+}
+
+.vi-ticket-side {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.vi-ticket-side button {
+  flex: 1;
+  width: auto;
+  padding: 8px;
+  background: #1c2030;
+  color: #c7ccd8;
+  border: 1px solid #2a3046;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.vi-ticket-side button.vi-buy.vi-active {
+  background: #26a69a;
+  border-color: #26a69a;
+  color: #08130f;
+}
+
+.vi-ticket-side button.vi-sell.vi-active {
+  background: #ef5350;
+  border-color: #ef5350;
+  color: #1a0b0b;
+}
+
+.vi-tk-lots {
+  display: flex;
+  gap: 6px;
+  margin: -4px 0 10px;
+}
+
+.vi-tk-lots button {
+  flex: 1;
+  width: auto;
+  padding: 3px 0;
+  background: #1c2030;
+  color: #c7ccd8;
+  border: 1px solid #2a3046;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.vi-tk-preview {
+  margin: 4px 0 10px;
+  padding: 8px 10px;
+  background: #101218;
+  border: 1px solid #232838;
+  border-radius: 6px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  min-height: 18px;
+}
+
+.vi-ticket #vi-tk-send {
+  width: 100%;
+  padding: 10px;
+  background: #26a69a;
+  color: #08130f;
+  font-weight: 600;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.vi-ticket #vi-tk-send:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 /* ── positions strip ────────────────────────────────────────────────── */
 .vi-pos {
   display: flex;
@@ -220,5 +563,210 @@ body,
 @media (max-width: 640px) {
   .vi-session {
     display: none;
+  }
+}
+
+/* ── launch pad auth ──────────────────────────────────────────────────── */
+.vi-auth {
+  margin: 0 0 8px;
+  padding: 16px;
+  background: #101218;
+  border: 1px solid #232838;
+  border-radius: 8px;
+}
+
+.vi-auth label {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 13px;
+  opacity: 0.85;
+}
+
+.vi-auth input,
+.vi-auth select {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: #1c2030;
+  color: #c7ccd8;
+  border: 1px solid #2a3046;
+  border-radius: 6px;
+  font: inherit;
+}
+
+.vi-auth-row {
+  display: flex;
+  gap: 8px;
+}
+
+.vi-auth-row button {
+  flex: 1;
+  width: auto;
+}
+
+#vi-register {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #232838;
+}
+
+#vi-auth-note {
+  margin: 12px 0 0;
+}
+
+#vi-session {
+  margin-top: 16px;
+}
+
+/* ── backyard ─────────────────────────────────────────────────────────── */
+#admin {
+  max-width: 780px;
+  margin: 5vh auto;
+  padding: 32px;
+  background: #14161d;
+  border: 1px solid #232838;
+  border-radius: 12px;
+}
+
+#admin h1 {
+  margin: 0 0 16px;
+  font-size: 24px;
+}
+
+#admin h2 {
+  margin: 24px 0 8px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+
+#admin input {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  background: #1c2030;
+  color: #c7ccd8;
+  border: 1px solid #2a3046;
+  border-radius: 6px;
+  font: inherit;
+}
+
+#admin button {
+  width: auto;
+  padding: 6px 14px;
+  background: #26a69a;
+  color: #08130f;
+  font-weight: 600;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+#admin button:disabled {
+  opacity: 0.6;
+}
+
+#admin #adm-go {
+  width: 100%;
+  padding: 10px;
+}
+
+#adm-error {
+  min-height: 18px;
+  color: #ef5350;
+  font-size: 13px;
+}
+
+#admin ul {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+#admin table {
+  width: 100%;
+  margin-top: 8px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+#admin th,
+#admin td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #1c2030;
+  text-align: left;
+  vertical-align: middle;
+}
+
+#admin th {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+
+#admin td.vi-actions {
+  white-space: nowrap;
+}
+
+#admin h3 {
+  margin: 20px 0 8px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+
+.vi-admin-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.vi-admin-add input,
+.vi-admin-add select {
+  flex: 1 1 140px;
+  padding: 6px 10px;
+  background: #1c2030;
+  color: #c7ccd8;
+  border: 1px solid #2a3046;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+}
+
+#admin td.vi-actions button {
+  margin-right: 6px;
+}
+
+#admin li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid #1c2030;
+  font-size: 13px;
+}
+
+#admin li button {
+  padding: 4px 10px;
+  font-size: 12px;
+  background: #1c2030;
+  color: #c7ccd8;
+  border: 1px solid #2a3046;
+  font-weight: 400;
+}
+
+@media (max-width: 640px) {
+  #admin {
+    margin: 0;
+    border: none;
+    border-radius: 0;
   }
 }

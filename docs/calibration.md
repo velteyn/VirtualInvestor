@@ -73,6 +73,13 @@ reversion. Impact scales inversely with liquidity, so an illiquid name moves mor
 order. The permanent component moves the reference (so reversion preserves it); the transient
 component moves only the fundamental (so it decays).
 
+Live confirmation (market-microstructure 6.2, 2026-10-06): a 494-share market buy in PEAR
+(~$90k) over the socket printed 182.01 → 183.13 (+0.6%) within seconds as bots reacted to
+the moved fundamental, then settled at 182.16 (+0.08%) — transient decay with a permanent
+remainder, exactly the modeled shape. (NVDO shows nothing at this size: at ~950k-share
+liquidity a 155-share impulse is below the value bots' 0.5% reaction threshold — impact
+needs an illiquid-enough name to surface in prints.)
+
 ## Matching throughput
 
 Run:
@@ -127,3 +134,40 @@ The `~200 MB` figure is the whole Maven/JVM process for a full test run, not the
 running simulation; the simulation itself is a small fraction of it. On this
 machine the stack runs comfortably, and the earlier caution stands: avoid running
 the full compose stack, local dev servers and a local LLM simultaneously.
+
+## Broker fees (player-accounts 5.3)
+
+Configuration: seed `42`, 180-minute session at minute steps (175 ticks),
+tariffs round-robined over the seed schedules (0.005/1.00, 0.01/2.00,
+0.02/5.00) by participant id. Measured 2026-10-04:
+
+```
+fees=false: rival-3 100869.66 | inst-1 100494.50 | rival-1 98393.62 | rival-2 98622.59
+fees=true:  inst-3  100334.89 (fees 147) | rival-3 99614.23 (fees 1418)
+            | rival-1 93666.46 (fees 3182) | rival-2 97799.35 (fees 835)
+```
+
+- The most active bot pays ~$3,200 over 175 ticks; idle participants pay nothing.
+- Fee-aware equities reorder the ranking (inst-3 overtakes rival-3) — expected:
+  leaderboard standing is now net of costs, which is the point of the tariff.
+- Rerun-equality still holds (fees are a pure function of fills); absolute
+  economics shifted, so earlier bot-economics snapshots no longer apply.
+
+## Liquidity ladders (realistic-liquidity 3.2)
+
+Configuration: seed `42`, 180-minute session at minute steps (175 ticks),
+5-deep geometric ladders, per-maker toxicity sensitivity, tariffs as in the
+fee baseline. Measured 2026-10-06:
+
+```
+orderEvents=7722 totalEvents=15948
+rival-4 100643.38 (fees 154) | inst-3 100024.89 (fees 18) | rival-2 99535.86 (fees 335)
+rival-3 98384.81 (fees 1328) | rival-1 95861.98 (fees 3076)
+```
+
+- Ladders + fade reorder economics again (rival-3 drops from the top; most
+  active bot pays ~$3,100, slightly less than the $3,182 pre-ladder baseline
+  as makers fade into toxicity).
+- Controlled probe (identical fundamental path): 5-deep ladders emit 1.64x the
+  order events of single-level quotes — under the 2x budget via quadratic tier
+  cadences plus diffed reposts.

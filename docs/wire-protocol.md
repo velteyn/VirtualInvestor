@@ -22,6 +22,10 @@ rejected with `400`. The WebSocket stream is versioned by the `hello` message.
 
 Every payload carries a stable `type` discriminator. The set (design D7):
 
+> The order's own kind travels as `orderType`, never `type`: `type` is the frame
+> discriminator (`"order"`), and a second `type` key would collide with it and hide the
+> frame kind from the client. The same rule applies to `placeOrder` (`orderType`).
+
 | `type` | Fields | Direction |
 |---|---|---|
 | `hello` | `protocolVersion` | server → client |
@@ -29,9 +33,16 @@ Every payload carries a stable `type` discriminator. The set (design D7):
 | `bar` | `symbol`, `interval`, `time`, `open`, `high`, `low`, `close`, `volume` | server → client |
 | `depth` | `symbol`, `bids[{price,qty}]`, `asks[{price,qty}]`, `ltp`, `tick` | server → client |
 | `trade` | `symbol`, `price`, `quantity`, `aggressor`, `tick` | server → client |
-| `order` | `orderId`, `participantId`, `symbol`, `side`, `type`, `quantity`, `price`, `triggerPrice`, `status`, `filledQty`, `tick` | both |
+| `order` | `orderId`, `participantId`, `symbol`, `side`, `orderType`, `quantity`, `price`, `triggerPrice`, `status`, `filledQty`, `reason`, `tick` | server → client |
+| `fill` | `orderId`, `symbol`, `side`, `orderType`, `quantity`, `filledQuantity`, `price`, `fee`, `tick` | server → client |
+| `markout` | `orderId`, `symbol`, `side`, `fillPrice`, `markPrice`, `markout`, `fillTick`, `markTick` | server → client |
+| `placeOrder` | `clientToken`, `symbol`, `side`, `orderType`, `quantity`, `price`, `triggerPrice` | client → server |
+| `modifyOrder` | `clientToken`, `orderId`, `price`, `triggerPrice` | client → server |
+| `cancelOrder` | `clientToken`, `orderId` | client → server |
+| `joinRound` | `roundId`, `participantId`, `sessionToken` (approved login token, required) | client → server |
+| `resync` | `participantId`, `sessionToken`, `lastSeenSeq` | client → server |
 | `position` | `participantId`, `symbol`, `netQty`, `avgPrice` | server → client |
-| `account` | `participantId`, `cash`, `realizedPnl` | server → client |
+| `account` | `participantId`, `cash`, `realizedPnl`, `feesPaid` | server → client |
 | `news` | `newsId`, `source`, `scope`, `symbol`, `sector`, `headline`, `body`, `signedMagnitude`, `durationTicks`, `stage`, `tick` | server → client |
 | `leaderboardEntry` | `rank`, `participantId`, `displayName`, `equity`, `startingCapital`, `returnFraction` | server → client |
 | `symbol` | `ticker`, `name`, `sector`, `assetClass` | server → client |
@@ -44,21 +55,53 @@ them so a core change cannot silently reshape the protocol.
 
 | Method | Path | Body | Returns |
 |---|---|---|---|
-| POST | `/api/rounds` | `{startingCapital, durationMinutes, preset}` | `round` (`201`) |
+| POST | `/api/rounds` | `{startingCapital, durationMinutes, preset, sessionToken?}` | `round` (`201`) |
+| POST | `/api/players/register` | `{username, password, bankId}` | player (`201`, `PENDING`) |
+| POST | `/api/players/login` | `{username, password}` | login + `sessionToken` (`200`; `403` pending, `401` bad credentials) |
+| POST | `/api/players/banks` | `{}` | bank[] with fee terms |
+| POST | `/api/admin/login` | `{password}` (master, env) | `{adminToken}` (later calls use `X-Admin-Token`) |
+| POST | `/api/admin/players` | `{}` | player rows |
+| POST | `/api/admin/players/approve|reject` | `{playerId}` | player row |
+| POST | `/api/admin/players/reset-password` | `{playerId, newPassword}` | `200` (sessions invalidated) |
+| POST | `/api/admin/players/reset-purse` | `{playerId, startingCapital}` | `200` |
+| POST | `/api/admin/rounds` | `{}` | round rows (`roundId`, `state`, `tick`) |
+| POST | `/api/admin/rounds/pause|resume|settle` | `{roundId}` | `200` |
 | POST | `/api/symbols/search` | `{query, limit}` | `symbol[]` |
 | POST | `/api/rounds/leaderboard` | `{roundId}` | `leaderboardEntry[]` |
+| POST | `/api/rounds/history` | `{roundId, symbol}` | warm-up `bar[]` |
+| POST | `/api/rounds/fills` | `{roundId, participantId}` | `fill[]` (one row per filled order) |
+| POST | `/api/rounds/markouts` | `{roundId, participantId, horizonTicks?}` | `markout[]` (fill price vs first print at/past fill tick + horizon; default horizon 5 ticks) |
+| POST | `/api/rounds/control` | `{roundId, action}` (`pause`/`resume`) | `204` |
 
 Errors: `400` for invalid configuration or an unsupported version, `404` for an unknown round.
+
+## Order frames
+
+Each `order` frame is a self-contained execution report (FIX `ExecutionReport`-style): it
+carries the order's full identity (`side`, `orderType`, `quantity`, `price`) plus its running
+fill state (`filledQty`, `status`). `status` is an uppercase `OrderStatus` name —
+`WORKING`, `PARTIAL`, `FILLED`, `CANCELLED`, `REJECTED` — so the terminal can rebuild its
+working-order book from the stream alone. Terminal states (`FILLED`, `CANCELLED`,
+`REJECTED`) drop the line; `WORKING`/`PARTIAL` (re)draw it.
 
 ## WebSocket behaviour
 
 - On connect the server sends `hello`.
+- A socket must `joinRound` with an approved login token before sending order commands;
+  otherwise it gets `not-approved` (bad/foreign token) or `not_joined` (no bind yet).
+  The bind follows the token's seat (`human`, `human-2`, …), never the stated
+  participant id; tokens without a seat in that round get `not-approved`.
+- Order commands are idempotent by `clientToken` and apply at the next tick (≤1 tick).
 - Market depth is coalesced per symbol within ~250 ms, so a fast book does not flood clients.
+- On reconnect the client re-sends `joinRound`, then `resync`; the server replays the
+  participant's working orders, non-flat positions and account as the same frames the live
+  stream emits. The client clears its mirror first, so the terminal reconciles.
+- Broadcast frames carry no `roundId`: run one live round at a time per server (pause stale
+  rounds via `/api/rounds/control`), or clients will see each other's markets.
 - An undecodable client message returns an `error` with code `bad_message`; a decoded message
-  that has no handler yet returns `not_implemented` (write handlers arrive with the terminal).
+  with no handler returns `not_implemented`.
 
 ## Not yet implemented
 
-- Order-entry command messages and their handlers (Group 11 adapters).
-- Authentication on REST/WebSocket beyond the round's session token.
+- Self-service recovery (no email): locked-out players go through the game master.
 - A generated schema artifact (the payloads are hand-written records today).

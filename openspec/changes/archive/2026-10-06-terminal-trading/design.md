@@ -9,6 +9,31 @@ tier — the working-order lines, position/P&L line and SL/TP brackets. The edge
 `MarketBroadcaster`; the only missing server piece is the WebSocket dispatch. The runtime already
 accepts commands, applies fills and streams events.
 
+### D7. Order events are self-contained, FIX `ExecutionReport`-style
+
+**Decision:** The core order lifecycle is a single `GameEvent.OrderReport` record carrying the
+order's full identity on every report — `orderId`, `participantId`, `symbol`, `side`,
+`orderType`, `quantity`, `price`, `filledQuantity`, `leavesQuantity`, `status` (`OrderStatus`),
+`event` (`OrderEventKind`: NEW/RESTED/TRIGGERED/PARTIAL_FILL/FILL/CANCELLED/REJECTED) and
+`reason` — rather than one thin record per lifecycle transition carrying only the field that
+changed.
+
+**Rationale:** This is how real order-management systems work. In FIX, every order update is an
+`ExecutionReport(35=8)` which "confirms receipt... relays fill information on working orders",
+and carries `Side(54)`, `OrdType(40)`, `Symbol(55)`, `OrderQty(38)`, `CumQty(14)`, `LeavesQty(151)`
+and `OrdStatus(39)` on **every** report, including rejects (see Cboe, Crypto.com, Paxos FIX
+docs). A consumer must be able to rebuild the working-order book from the stream alone. Our
+fill-only records made that impossible and left the terminal's order frames with empty
+side/type.
+
+**Alternatives:** bolting `side`+`type` onto only the fill events (partial, still not
+rebuildable); a runtime side-table looked up per order id (works but is not the model, and does
+not survive pure event replay). Rejected in favour of the standard shape.
+
+**Consequences:** the change touches the deterministic core (event records, codec, golden-master
+hash) and several test fixtures. The events become the canonical order book replay, which also
+strengthens `persistence-resume`.
+
 ## Goals / Non-Goals
 
 **Goals:**

@@ -67,6 +67,25 @@ public final class JdbcEventLog implements EventLog {
         }
     }
 
+    /**
+     * Delete rows strictly below a snapshotted sequence (compaction, not mutation:
+     * the snapshot already carries that prefix, and recovery replays the tail).
+     * The boundary row stays so sequence numbering never restarts into reuse —
+     * a fresh writer seeds from the log's high-water mark. Keeps checkpoint cost
+     * bounded as rounds grow.
+     */
+    public void pruneBelow(long seq) {
+        try (Connection connection = dataSource.getConnection();
+                PreparedStatement statement = connection.prepareStatement(
+                        "DELETE FROM events WHERE round_id = ? AND seq < ?")) {
+            statement.setString(1, roundId);
+            statement.setLong(2, seq);
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            throw new IllegalStateException("failed pruning events for round " + roundId, e);
+        }
+    }
+
     @Override
     public List<SequencedEvent> readFrom(long fromSeq) {
         List<SequencedEvent> events = new ArrayList<>();

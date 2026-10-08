@@ -67,8 +67,14 @@ public class MarketBroadcaster {
         sent.incrementAndGet();
         for (WebSocketSession session : sessions) {
             try {
-                if (session.isOpen()) {
-                    session.sendMessage(message);
+                // One session, one writer at a time: every live round publishes on
+                // its own driver thread, and concurrent sendMessage calls on the
+                // same session corrupt the stream (or throw and unsubscribe the
+                // client mid-session). Per-session locking serializes them.
+                synchronized (session) {
+                    if (session.isOpen()) {
+                        session.sendMessage(message);
+                    }
                 }
             } catch (Exception e) {
                 sessions.remove(session);

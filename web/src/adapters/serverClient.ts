@@ -48,6 +48,43 @@ export interface LeaderboardEntry {
   returnFraction: number;
 }
 
+export interface PlayerResponse {
+  playerId: string;
+  username: string;
+  kind: string;
+  status: string;
+  bankId: string;
+}
+
+export interface LoginResponse {
+  playerId: string;
+  username: string;
+  status: string;
+  bankId: string;
+  sessionToken: string;
+  mustChangePassword: boolean;
+}
+
+export interface BankResponse {
+  bankId: string;
+  displayName: string;
+  feePerShare: number;
+  ticketMinimum: number;
+  custodyRate: number;
+}
+
+export interface FillRow {
+  orderId: string;
+  symbol: string;
+  side: string;
+  orderType: string;
+  quantity: number;
+  filledQuantity: number;
+  price: number;
+  fee: number;
+  tick: number;
+}
+
 export interface OrderCommand {
   clientToken: string;
   symbol: string;
@@ -70,7 +107,12 @@ export class ServerClient {
   private readonly baseUrl: string;
   private socket: WebSocket | null = null;
   private readonly listeners = new Set<PayloadListener>();
+  private readonly reconnectListeners = new Set<() => void>();
   private reconnectTimer: number | null = null;
+  private lastJoin: { roundId: string; participantId: string } | null = null;
+  private loginToken: string | null = null;
+  private loginBankId: string | null = null;
+  private wasConnected = false;
 
   constructor(baseUrl = '') {
     this.baseUrl = baseUrl.replace(/\/$/, '');
@@ -90,7 +132,9 @@ export class ServerClient {
   }
 
   createRound(config: RoundConfig): Promise<RoundResponse> {
-    return this.post<RoundResponse>('/api/rounds', config);
+    // Link the round to the logged-in player so joins bind a seat and the
+    // purse resets/writes back; anonymous rounds bind nobody.
+    return this.post<RoundResponse>('/api/rounds', { ...config, sessionToken: this.loginToken });
   }
 
   searchSymbols(query: string, limit = 20): Promise<SymbolResponse[]> {
@@ -107,9 +151,70 @@ export class ServerClient {
     return this.post<LeaderboardEntry[]>('/api/rounds/leaderboard', { roundId });
   }
 
-  /** Bind this socket to a round so order commands route to it. */
-  joinRound(roundId: string, participantId: string): void {
-    this.send({ type: 'joinRound', roundId, participantId });
+  /** Per-order fill history for one participant, folded from the round journal. */
+  fills(roundId: string, participantId: string): Promise<FillRow[]> {
+    return this.post<FillRow[]>('/api/rounds/fills', { roundId, participantId });
+  }
+
+  /** Register a new player; the account pends game-master approval before play. */
+  register(username: string, password: string, bankId: string): Promise<PlayerResponse> {
+    return this.post<PlayerResponse>('/api/players/register', { username, password, bankId });
+  }
+
+  /** Log in an approved player, remembering the token for joins. */
+  async login(username: string, password: string): Promise<LoginResponse> {
+    const response = await this.post<LoginResponse>('/api/players/login', { username, password });
+    this.loginToken = response.sessionToken;
+    this.loginBankId = response.bankId;
+    return response;
+  }
+
+  /** The logged-in player's bank, for fee previews (order-ticket 1.4). */
+  bankOfPlayer(): string | null {
+    return this.loginBankId;
+  }
+
+  /** Fee-schedule banks a registering player can choose from. */
+  banks(): Promise<BankResponse[]> {
+    return this.post<BankResponse[]>('/api/players/banks', {});
+  }
+
+  /** Player-chosen password change; clears the forced-change flag. */
+  changePassword(username: string, oldPassword: string, newPassword: string): Promise<void> {
+    return this.post<void>('/api/players/change-password', { username, oldPassword, newPassword });
+  }
+
+  /**
+   * Bind this socket to a round so order commands route to it. The login token is
+   * required: only approved players hold one, and the server refuses the bind
+   * without it. Stored for rejoin on reconnect.
+   */
+  joinRound(roundId: string, participantId: string, sessionToken: string | null = null): void {
+    const token = sessionToken ?? this.loginToken;
+    this.lastJoin = { roundId, participantId };
+    // eslint-disable-next-line no-console
+    console.info(`[vi] join round=${roundId} as=${participantId} token=${token === null ? 'none' : 'present'}`);
+    this.send({ type: 'joinRound', roundId, participantId, sessionToken: token });
+  }
+
+  /**
+   * Ask the server to replay this participant's working orders, positions and account
+   * (task 5.2). Sent automatically on reconnect; call it directly to reconcile on demand.
+   */
+  resync(): void {
+    if (this.lastJoin === null) {
+      return;
+    }
+    // eslint-disable-next-line no-console
+    console.info(`[vi] resync round=${this.lastJoin.roundId} as=${this.lastJoin.participantId}`);
+    this.send({ type: 'resync', participantId: this.lastJoin.participantId,
+      sessionToken: this.loginToken ?? '', lastSeenSeq: 0 });
+  }
+
+  /** Fired whenever the socket reconnects after a drop (after rejoin + resync are queued). */
+  onReconnect(listener: () => void): () => void {
+    this.reconnectListeners.add(listener);
+    return () => this.reconnectListeners.delete(listener);
   }
 
   /**
@@ -117,17 +222,23 @@ export class ServerClient {
    * sent as `orderType` because the wire discriminator occupies the `type` key.
    */
   placeOrder(roundId: string, participantId: string, order: OrderCommand): void {
-    this.joinRound(roundId, participantId);
+    this.joinRound(roundId, participantId, this.loginToken);
+    // eslint-disable-next-line no-console
+    console.info(`[vi] send placeOrder ${order.clientToken} ${order.side} ${order.quantity} ${order.symbol} ${order.type} @${order.price ?? 0}`);
     this.send({ type: 'placeOrder', clientToken: order.clientToken, symbol: order.symbol,
       side: order.side, orderType: order.type, quantity: order.quantity, price: order.price ?? 0,
       triggerPrice: order.triggerPrice ?? 0 });
   }
 
   modifyOrder(orderId: string, price: number, triggerPrice = 0): void {
+    // eslint-disable-next-line no-console
+    console.info(`[vi] send modifyOrder ${orderId} -> ${price}`);
     this.send({ type: 'modifyOrder', clientToken: `mod-${orderId}-${Date.now()}`, orderId, price, triggerPrice });
   }
 
   cancelOrder(orderId: string): void {
+    // eslint-disable-next-line no-console
+    console.info(`[vi] send cancelOrder ${orderId}`);
     this.send({ type: 'cancelOrder', clientToken: `cancel-${orderId}-${Date.now()}`, orderId });
   }
 
@@ -149,6 +260,25 @@ export class ServerClient {
     const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
     const socket = new WebSocket(`${scheme}://${window.location.host}/ws`);
     this.socket = socket;
+    const isReconnect = this.wasConnected;
+    socket.onopen = () => {
+      this.wasConnected = true;
+      // eslint-disable-next-line no-console
+      console.info(`[vi] socket open${isReconnect ? ' (reconnect)' : ''}`);
+      if (isReconnect) {
+        // Rebind the fresh socket and replay the snapshot before live frames resume,
+        // then let feeds clear their mirrors so the terminal reconciles (task 5.2).
+        if (this.lastJoin !== null) {
+          socket.send(JSON.stringify({ type: 'joinRound', ...this.lastJoin, sessionToken: this.loginToken }));
+          socket.send(JSON.stringify({ type: 'resync',
+            participantId: this.lastJoin.participantId, sessionToken: this.loginToken ?? '',
+            lastSeenSeq: 0 }));
+        }
+        for (const listener of this.reconnectListeners) {
+          listener();
+        }
+      }
+    };
     socket.onmessage = (event) => {
       let payload: WirePayload;
       try {
@@ -156,11 +286,17 @@ export class ServerClient {
       } catch {
         return;
       }
+      if (payload.type === 'error') {
+        // eslint-disable-next-line no-console
+        console.warn(`[vi] server error: ${String(payload.code ?? '')} ${String(payload.message ?? '')}`);
+      }
       for (const listener of this.listeners) {
         listener(payload);
       }
     };
     socket.onclose = () => {
+      // eslint-disable-next-line no-console
+      console.info('[vi] socket closed, reconnecting…');
       this.socket = null;
       if (this.reconnectTimer === null) {
         this.reconnectTimer = window.setTimeout(() => {

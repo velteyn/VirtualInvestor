@@ -3,6 +3,7 @@ package com.virtualinvestor.persist.session;
 import com.virtualinvestor.core.domain.RoundState;
 import com.virtualinvestor.core.event.GameEvent;
 import com.virtualinvestor.persist.event.BatchedEventLogWriter;
+import com.virtualinvestor.persist.event.JdbcEventLog;
 import com.virtualinvestor.persist.event.EventLog;
 import com.virtualinvestor.persist.snapshot.Recovery;
 import com.virtualinvestor.persist.snapshot.SnapshotStore;
@@ -69,11 +70,37 @@ public final class RoundRecoveryService {
         checkpoint(tick);
     }
 
+    /**
+     * Incremental snapshot text and its sequence: checkpoints append the tail
+     * instead of re-encoding history, so checkpoint cost stays O(tail) no
+     * matter how long the round runs. Superseded snapshots are deleted.
+     */
+    private String incrementalState;
+    private long incrementalSeq = -1L;
+
     /** Write a snapshot of the current history at the current sequence, then flush the log. */
     public void checkpoint(long tick) {
         writer.flush();
-        snapshots.save(new com.virtualinvestor.persist.snapshot.WorldSnapshot(
-                tick, log.latestSeq(), encode(Recovery.recover(log, snapshots))));
+        long seq = log.latestSeq();
+        if (incrementalState == null) {
+            incrementalState = encode(Recovery.recover(log, snapshots));
+            incrementalSeq = seq;
+        } else {
+            List<GameEvent> tail = new java.util.ArrayList<>();
+            for (com.virtualinvestor.persist.event.SequencedEvent sequenced : log.readFrom(incrementalSeq + 1L)) {
+                tail.add(sequenced.event());
+            }
+            if (!tail.isEmpty()) {
+                incrementalState = incrementalState + "\n" + encode(tail);
+            }
+            incrementalSeq = seq;
+        }
+        snapshots.save(new com.virtualinvestor.persist.snapshot.WorldSnapshot(tick, seq, incrementalState));
+        snapshots.deleteBefore(tick);
+        // Compact the consumed prefix so checkpoints stay O(tail) as the round grows.
+        if (log instanceof JdbcEventLog jdbc) {
+            jdbc.pruneBelow(seq);
+        }
     }
 
     private static String encode(List<GameEvent> events) {

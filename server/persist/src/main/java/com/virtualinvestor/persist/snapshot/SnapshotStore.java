@@ -9,4 +9,7 @@ public interface SnapshotStore {
 
     /** The snapshot with the highest sequence number, if any. */
     Optional<WorldSnapshot> latest();
+
+    /** Delete snapshots below the given tick (superseded checkpoints accumulate otherwise). */
+    void deleteBefore(long tick);
 }

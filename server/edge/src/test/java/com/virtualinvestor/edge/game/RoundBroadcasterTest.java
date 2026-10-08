@@ -32,13 +32,82 @@ class RoundBroadcasterTest {
                 new GameEvent.TradePrinted("NVDO", 100.0, 10L, OrderSide.BUY, 5L),
                 new GameEvent.NewsReleased("n1", "THE_WIRE", NewsScope.MACRO, null, null,
                         "Data beats", "body", 0.01, 300L, NewsStage.RUMOR, 5L),
-                new GameEvent.OrderFilled("o1", "NVDO", 100.0, 10L, 5L)), 1L);
+                new GameEvent.OrderReport("o1", "p1", "NVDO", OrderSide.BUY,
+                        com.virtualinvestor.core.domain.OrderType.LIMIT, 10L, 100.0, 10L, 0L,
+                        com.virtualinvestor.core.domain.OrderStatus.FILLED,
+                        com.virtualinvestor.core.domain.OrderEventKind.FILL, null, 5L)), 1L);
 
         String all = String.join("\n", session.sent());
         assertTrue(all.contains("\"type\":\"trade\""), all);
         assertTrue(all.contains("\"type\":\"news\""), all);
         assertTrue(all.contains("\"type\":\"order\""), all);
         assertTrue(all.contains("\"type\":\"depth\""), "a trade should also publish depth");
+
+        // The order frame must carry the order's own type under `orderType`: a `type`
+        // component would emit a duplicate key and hide the frame discriminator.
+        String orderFrame = session.sent().stream().filter(frame -> frame.contains("\"orderId\"")).findFirst()
+                .orElseThrow(() -> new AssertionError("expected an order frame in " + all));
+        assertTrue(orderFrame.contains("\"orderType\":\"LIMIT\""), orderFrame);
+        assertTrue(orderFrame.contains("\"side\":\"BUY\""), orderFrame);
+        assertTrue(orderFrame.contains("\"status\":\"FILLED\""), orderFrame);
+        long typeKeys = java.util.regex.Pattern.compile("\"type\"\\s*:").matcher(orderFrame).results().count();
+        assertEquals(1, typeKeys, "the frame discriminator must be the only `type` key: " + orderFrame);
+    }
+
+    @Test
+    void rejectedReportsCarryTheirReason() {
+        MarketBroadcaster broadcaster = new MarketBroadcaster();
+        RecordingWebSocketSession session = new RecordingWebSocketSession();
+        broadcaster.register(session);
+        RoundBroadcaster bridge = new RoundBroadcaster(broadcaster);
+        bridge.bindEngines(List::of);
+
+        bridge.publish(List.of(
+                new GameEvent.OrderReport("o9", "p1", "NVDO", OrderSide.BUY,
+                        com.virtualinvestor.core.domain.OrderType.MARKET, 5L, 0.0, 0L, 5L,
+                        com.virtualinvestor.core.domain.OrderStatus.REJECTED,
+                        com.virtualinvestor.core.domain.OrderEventKind.REJECTED,
+                        "no liquidity for market order", 7L)), 1L);
+
+        String all = String.join("\n", session.sent());
+        assertTrue(all.contains("\"status\":\"REJECTED\""), all);
+        assertTrue(all.contains("no liquidity for market order"), all);
+    }
+
+    @Test
+    void positionAndAccountUpdatesStreamAsFrames() {
+        MarketBroadcaster broadcaster = new MarketBroadcaster();
+        RecordingWebSocketSession session = new RecordingWebSocketSession();
+        broadcaster.register(session);
+        RoundBroadcaster bridge = new RoundBroadcaster(broadcaster);
+        bridge.bindEngines(List::of);
+
+        bridge.publish(List.of(
+                new GameEvent.PositionUpdated("p1", "NVDO", 10L, 640.0, 25.0, 9L),
+                new GameEvent.AccountUpdated("p1", 93_600.0, 25.0, 4.0, 9L)), 1L);
+
+        String all = String.join("\n", session.sent());
+        assertTrue(all.contains("\"type\":\"position\""), all);
+        assertTrue(all.contains("\"type\":\"account\""), all);
+        assertTrue(all.contains("640.0"), all);
+        assertTrue(all.contains("93600.0"), all);
+    }
+
+    @Test
+    void closedBarsAreBroadcastAsBarFrames() {
+        MarketBroadcaster broadcaster = new MarketBroadcaster();
+        RecordingWebSocketSession session = new RecordingWebSocketSession();
+        broadcaster.register(session);
+        RoundBroadcaster bridge = new RoundBroadcaster(broadcaster);
+        bridge.bindEngines(List::of);
+
+        bridge.publish(List.of(
+                new GameEvent.BarClosed("NVDO", "6s", 1_700_000_360L, 640.0, 641.5, 639.0, 641.0, 1200L, 60L)), 1L);
+
+        String all = String.join("\n", session.sent());
+        assertTrue(all.contains("\"type\":\"bar\""), all);
+        assertTrue(all.contains("\"symbol\":\"NVDO\""), all);
+        assertTrue(all.contains("641.5"), all);
     }
 
     @Test

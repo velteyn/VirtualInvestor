@@ -48,6 +48,11 @@ public final class StopBook {
         return byId.get(stopId);
     }
 
+    /** All untriggered stops, insertion order preserved (used for reconnect snapshots). */
+    public List<StopOrder> orders() {
+        return List.copyOf(byId.values());
+    }
+
     public int size() {
         return byId.size();
     }

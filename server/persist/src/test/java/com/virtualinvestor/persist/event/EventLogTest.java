@@ -48,7 +48,10 @@ class EventLogTest {
 
         List<GameEvent> original = List.of(
                 new GameEvent.Tick(1L, 100L),
-                new GameEvent.OrderAccepted("o1", "p1", "ACME", 1L),
+                new GameEvent.OrderReport("o1", "p1", "ACME", com.virtualinvestor.core.domain.OrderSide.BUY,
+                        com.virtualinvestor.core.domain.OrderType.LIMIT, 10L, 100.0, 0L, 10L,
+                        com.virtualinvestor.core.domain.OrderStatus.WORKING,
+                        com.virtualinvestor.core.domain.OrderEventKind.NEW, null, 1L),
                 new GameEvent.TradePrinted("ACME", 100.0, 10L, com.virtualinvestor.core.domain.OrderSide.BUY, 2L),
                 new GameEvent.BookChanged("ACME", 99.9, 100L, 100.1, 100L, 100.0, 3L),
                 new GameEvent.Tick(4L, 400L));

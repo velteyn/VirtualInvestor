@@ -23,6 +23,8 @@ public interface WireMessage {
             @JsonSubTypes.Type(value = OrderDto.class, name = "order"),
             @JsonSubTypes.Type(value = PositionDto.class, name = "position"),
             @JsonSubTypes.Type(value = AccountDto.class, name = "account"),
+            @JsonSubTypes.Type(value = FillDto.class, name = "fill"),
+            @JsonSubTypes.Type(value = MarkoutDto.class, name = "markout"),
             @JsonSubTypes.Type(value = NewsDto.class, name = "news"),
             @JsonSubTypes.Type(value = LeaderboardEntryDto.class, name = "leaderboardEntry"),
             @JsonSubTypes.Type(value = SymbolDto.class, name = "symbol"),
@@ -88,20 +90,42 @@ public interface WireMessage {
             implements WireMessage.Payload {
     }
 
+    /**
+     * An order update for the terminal's working-order book. The order type is `orderType`
+     * because the JSON discriminator already occupies the `type` key (a `type` component
+     * here would emit a duplicate key and hide the frame discriminator from the client).
+     */
     @JsonTypeName("order")
-    record OrderDto(String orderId, String participantId, String symbol, String side, String type, long quantity,
-                    double price, double triggerPrice, String status, long filledQty, long tick)
+    record OrderDto(String orderId, String participantId, String symbol, String side, String orderType, long quantity,
+                    double price, double triggerPrice, String status, long filledQty, String reason, long tick)
             implements WireMessage.Payload {
     }
 
     @JsonTypeName("position")
-    record PositionDto(String participantId, String symbol, long netQty, double avgPrice)
+    record PositionDto(String participantId, String symbol, long netQty, double avgPrice, double realized)
             implements WireMessage.Payload {
     }
 
     @JsonTypeName("account")
-    record AccountDto(String participantId, double cash, double realizedPnl)
+    record AccountDto(String participantId, double cash, double realizedPnl, double feesPaid)
             implements WireMessage.Payload {
+    }
+
+    /** One filled order for the portfolio history: cumulative fill plus the fee on it. */
+    @JsonTypeName("fill")
+    record FillDto(String orderId, String symbol, String side, String orderType, long quantity,
+                   long filledQuantity, double price, double fee, long tick)
+            implements WireMessage.Payload {
+    }
+
+    /**
+     * One fill joined to the first print at or past the horizon (realistic-liquidity
+     * 4.1): fill price, mark price and the signed markout, so execution quality is
+     * readable over the wire without touching the journal.
+     */
+    @JsonTypeName("markout")
+    record MarkoutDto(String orderId, String symbol, String side, double fillPrice, double markPrice,
+                      double markout, long fillTick, long markTick) implements WireMessage.Payload {
     }
 
     @JsonTypeName("news")
@@ -133,9 +157,13 @@ public interface WireMessage {
     record Event(long seq, long tick, String type, Payload payload) {
     }
 
-    /** Binds this socket to a round and participant, so commands route to that round. */
+    /**
+     * Binds this socket to a round and participant, so commands route to that round.
+     * The login token is required: only approved players hold one, so sockets without
+     * an approved identity are refused with {@code not-approved} and can only watch.
+     */
     @JsonTypeName("joinRound")
-    record JoinRound(String roundId, String participantId) implements WireMessage.Payload {
+    record JoinRound(String roundId, String participantId, String sessionToken) implements WireMessage.Payload {
     }
 
     /** A request to catch up from a sequence number after a dropped connection. */

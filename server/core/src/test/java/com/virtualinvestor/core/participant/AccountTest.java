@@ -36,6 +36,30 @@ class AccountTest {
     }
 
     @Test
+    void partialCloseBooksHalfTheGainPerSymbol() {
+        Account account = new Account("h1", 100_000.0);
+        account.applyFill("ACME", OrderSide.BUY, 10L, 100.0);
+        account.applyFill("BETA", OrderSide.BUY, 10L, 50.0);
+        account.applyFill("ACME", OrderSide.SELL, 5L, 120.0);
+
+        assertEquals(100.0, account.realizedFor("ACME"), EPS);
+        assertEquals(100.0, account.realizedPnl(), EPS);
+        assertEquals(0.0, account.realizedFor("BETA"), EPS);
+        assertEquals(0.0, account.realizedFor("NEVER_TRADED"), EPS);
+    }
+
+    @Test
+    void flipAttributesTheClosedLegPerSymbol() {
+        Account account = new Account("h1", 100_000.0);
+        account.applyFill("ACME", OrderSide.BUY, 10L, 100.0);
+        account.applyFill("ACME", OrderSide.SELL, 15L, 110.0);
+
+        assertEquals(100.0, account.realizedFor("ACME"), EPS);
+        assertEquals(100.0, account.realizedPnl(), EPS);
+        assertEquals(-5L, account.position("ACME").netQty());
+    }
+
+    @Test
     void reducingAShortRealizesProfit() {
         Account account = new Account("h1", 100_000.0);
         account.applyFill("ACME", OrderSide.SELL, 10L, 100.0);

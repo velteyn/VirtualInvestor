@@ -2,7 +2,10 @@ package com.virtualinvestor.core.event;
 
 import com.virtualinvestor.core.domain.NewsScope;
 import com.virtualinvestor.core.domain.NewsStage;
+import com.virtualinvestor.core.domain.OrderEventKind;
 import com.virtualinvestor.core.domain.OrderSide;
+import com.virtualinvestor.core.domain.OrderStatus;
+import com.virtualinvestor.core.domain.OrderType;
 import com.virtualinvestor.core.domain.SessionPhase;
 
 /**
@@ -17,25 +20,26 @@ public sealed interface GameEvent {
     record Tick(long tick, long logicalMillis) implements GameEvent {
     }
 
-    record OrderAccepted(String orderId, String participantId, String symbol, long tick) implements GameEvent {
-    }
-
-    record OrderRejected(String orderId, String participantId, String symbol, String reason, long tick) implements GameEvent {
-    }
-
-    record OrderRested(String orderId, String symbol, double price, long quantity, long tick) implements GameEvent {
-    }
-
-    record OrderTriggered(String orderId, String symbol, double price, long tick) implements GameEvent {
-    }
-
-    record OrderPartiallyFilled(String orderId, String symbol, double price, long filledQuantity, long tick) implements GameEvent {
-    }
-
-    record OrderFilled(String orderId, String symbol, double price, long filledQuantity, long tick) implements GameEvent {
-    }
-
-    record OrderCancelled(String orderId, String symbol, String reason, long tick) implements GameEvent {
+    /**
+     * A self-contained order update, modelled on FIX's ExecutionReport(35=8): every report
+     * carries the order's full identity (side, type, quantity, price) and its running fill
+     * state (filled, leaves, status), so a consumer can rebuild the working-order book from the
+     * stream alone. `event` names why the report was sent.
+     */
+    record OrderReport(
+            String orderId,
+            String participantId,
+            String symbol,
+            OrderSide side,
+            OrderType orderType,
+            long quantity,
+            double price,
+            long filledQuantity,
+            long leavesQuantity,
+            OrderStatus status,
+            OrderEventKind event,
+            String reason,
+            long tick) implements GameEvent {
     }
 
     record RoundCreated(String roundId, long seed, long startingCapital, long durationTicks, String preset, long tick) implements GameEvent {
@@ -116,6 +120,19 @@ public sealed interface GameEvent {
             double low,
             double close,
             long volume,
+            long tick) implements GameEvent {
+    }
+
+    /**
+     * A participant's position after a fill, so mirrors track holdings live instead of
+     * waiting for a resync. Emitted per counterparty with the account below.
+     */
+    record PositionUpdated(String participantId, String symbol, long netQty, double avgPrice, double realized,
+            long tick) implements GameEvent {
+    }
+
+    /** A participant's cash state after a fill (cash moved and/or fees debited). */
+    record AccountUpdated(String participantId, double cash, double realizedPnl, double feesPaid,
             long tick) implements GameEvent {
     }
 

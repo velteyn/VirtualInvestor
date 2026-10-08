@@ -8,6 +8,8 @@ import com.virtualinvestor.core.book.OrderBook;
 import com.virtualinvestor.core.book.RestingOrder;
 import com.virtualinvestor.core.book.StopBook;
 import com.virtualinvestor.core.book.StopOrder;
+import com.virtualinvestor.core.domain.OrderEventKind;
+import com.virtualinvestor.core.domain.OrderStatus;
 import com.virtualinvestor.core.domain.OrderType;
 import com.virtualinvestor.core.event.GameEvent;
 import java.util.ArrayList;
@@ -79,12 +81,13 @@ public final class InstrumentEngine {
     }
 
     private void submitInto(IncomingOrder order, long tick, List<GameEvent> events, List<Fill> fills) {
-        events.add(new GameEvent.OrderAccepted(order.id(), order.participantId(), order.symbol(), tick));
+        events.add(report(order, OrderStatus.WORKING, OrderEventKind.NEW, 0L, order.quantity(),
+                order.limitPrice(), null, tick));
 
         MatchResult result = matcher.match(book, order);
         if (result.rejected()) {
-            events.add(new GameEvent.OrderRejected(
-                    order.id(), order.participantId(), order.symbol(), result.rejection(), tick));
+            events.add(report(order, OrderStatus.REJECTED, OrderEventKind.REJECTED, 0L, order.quantity(),
+                    order.limitPrice(), result.rejection(), tick));
             return;
         }
 
@@ -92,48 +95,81 @@ public final class InstrumentEngine {
             lastPrice = fill.price();
             fills.add(fill);
             events.add(new GameEvent.TradePrinted(symbol, fill.price(), fill.quantity(), order.side(), tick));
-            if (fill.makerRemainingAfter() == 0L) {
-                events.add(new GameEvent.OrderFilled(
-                        fill.makerOrderId(), symbol, fill.price(), fill.makerQuantity(), tick));
-            } else {
-                events.add(new GameEvent.OrderPartiallyFilled(
-                        fill.makerOrderId(), symbol, fill.price(), fill.makerQuantity() - fill.makerRemainingAfter(), tick));
-            }
+            // A self-contained report for the resting (maker) order, per FIX: it carries the
+            // maker's own side, type, original quantity and running fill state.
+            boolean makerFilled = fill.makerRemainingAfter() == 0L;
+            events.add(new GameEvent.OrderReport(
+                    fill.makerOrderId(), fill.makerParticipantId(), symbol, fill.makerSide(),
+                    OrderType.LIMIT, fill.makerQuantity(), fill.price(),
+                    fill.makerQuantity() - fill.makerRemainingAfter(), fill.makerRemainingAfter(),
+                    makerFilled ? OrderStatus.FILLED : OrderStatus.PARTIAL,
+                    makerFilled ? OrderEventKind.FILL : OrderEventKind.PARTIAL_FILL,
+                    null, tick));
         }
 
         long filled = result.filledQuantity();
-        if (filled == order.quantity()) {
-            events.add(new GameEvent.OrderFilled(order.id(), symbol, lastPrice, filled, tick));
-        } else if (filled > 0L) {
-            events.add(new GameEvent.OrderPartiallyFilled(order.id(), symbol, lastPrice, filled, tick));
+        long leaves = order.quantity() - filled;
+        if (filled > 0L && leaves > 0L) {
+            // The taker executed against resting orders but still has size left: report the
+            // accumulated fill, then say what becomes of the remainder.
+            events.add(report(order, OrderStatus.PARTIAL, OrderEventKind.PARTIAL_FILL,
+                    filled, leaves, lastPrice, null, tick));
         }
-
         if (result.rested()) {
-            events.add(new GameEvent.OrderRested(
-                    order.id(), symbol, order.limitPrice(), order.quantity() - filled, tick));
-        } else if (order.type() == OrderType.MARKET && filled < order.quantity()) {
-            events.add(new GameEvent.OrderCancelled(order.id(), symbol, "market remainder cancelled", tick));
+            if (filled == 0L) {
+                events.add(report(order, OrderStatus.WORKING, OrderEventKind.RESTED,
+                        0L, leaves, order.limitPrice(), null, tick));
+            }
+        } else if (leaves > 0L) {
+            // Market and IOC remainders are cancelled outright rather than rested.
+            events.add(report(order, OrderStatus.CANCELLED, OrderEventKind.CANCELLED,
+                    filled, leaves, 0.0, "market remainder cancelled", tick));
+        } else {
+            events.add(report(order, OrderStatus.FILLED, OrderEventKind.FILL,
+                    filled, 0L, lastPrice, null, tick));
         }
 
         if (filled > 0L || result.rested()) {
             for (IncomingOrder triggered : stops.onLastTradedPrice(lastPrice)) {
-                events.add(new GameEvent.OrderTriggered(triggered.id(), symbol, lastPrice, tick));
+                events.add(new GameEvent.OrderReport(
+                        triggered.id(), triggered.participantId(), symbol, triggered.side(), triggered.type(),
+                        triggered.quantity(), triggered.limitPrice() > 0 ? triggered.limitPrice() : lastPrice,
+                        0L, triggered.quantity(), OrderStatus.WORKING, OrderEventKind.TRIGGERED, null, tick));
                 submitInto(triggered, tick, events, fills);
             }
         }
+    }
+
+    /** Build a self-contained report carrying the order's full identity and fill state. */
+    private static GameEvent.OrderReport report(
+            IncomingOrder order, OrderStatus status, OrderEventKind kind,
+            long filled, long leaves, double price, String reason, long tick) {
+        return new GameEvent.OrderReport(
+                order.id(), order.participantId(), order.symbol(), order.side(), order.type(),
+                order.quantity(), price, filled, leaves, status, kind, reason, tick);
     }
 
     /** Cancel a working or untriggered order and return the resulting event, if any. */
     public List<GameEvent> cancel(String orderId, long tick) {
         RestingOrder resting = book.cancel(orderId);
         if (resting != null) {
-            return List.of(new GameEvent.OrderCancelled(orderId, symbol, "user", tick));
+            return List.of(cancelReport(resting, "user", tick));
         }
         StopOrder stop = stops.cancel(orderId);
         if (stop != null) {
-            return List.of(new GameEvent.OrderCancelled(orderId, symbol, "user", tick));
+            return List.of(new GameEvent.OrderReport(
+                    stop.id(), stop.participantId(), symbol, stop.side(), stop.type(),
+                    stop.quantity(), stop.limitPrice(), 0L, stop.quantity(),
+                    OrderStatus.CANCELLED, OrderEventKind.CANCELLED, "user", tick));
         }
         return List.of();
+    }
+
+    private GameEvent.OrderReport cancelReport(RestingOrder order, String reason, long tick) {
+        return new GameEvent.OrderReport(
+                order.id(), order.participantId(), symbol, order.side(), OrderType.LIMIT,
+                order.quantity(), order.price(), order.filled(), order.remaining(),
+                OrderStatus.CANCELLED, OrderEventKind.CANCELLED, reason, tick);
     }
 
     /** Rest a plain order directly (used to seed a book in tests). */

@@ -5,6 +5,7 @@ import com.virtualinvestor.persist.event.BatchedEventLogWriter;
 import com.virtualinvestor.persist.session.RoundRecoveryService;
 import java.util.List;
 import java.util.Objects;
+import java.util.logging.Logger;
 
 /**
  * Journal backed by the durable event log (design D5). Events are appended through the batched
@@ -40,7 +41,14 @@ public final class JournaledWorldJournal implements WorldJournal {
             return;
         }
         lastCheckpointTick = tick;
-        recovery.checkpoint(tick);
+        try {
+            recovery.checkpoint(tick);
+        } catch (RuntimeException e) {
+            // Persistence must never kill the market: skip this checkpoint and
+            // keep ticking; the next cadence retries. Logged loudly.
+            Logger.getLogger(JournaledWorldJournal.class.getName())
+                    .warning("checkpoint at tick " + tick + " failed, skipping: " + e);
+        }
     }
 
     /** Flush any buffered events, e.g. before shutdown. */

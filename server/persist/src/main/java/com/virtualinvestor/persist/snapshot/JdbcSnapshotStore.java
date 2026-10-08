@@ -43,6 +43,19 @@ public final class JdbcSnapshotStore implements SnapshotStore {
     }
 
     @Override
+    public void deleteBefore(long tick) {
+        try (Connection connection = dataSource.getConnection();
+                PreparedStatement statement = connection.prepareStatement(
+                        "DELETE FROM snapshots WHERE round_id = ? AND tick < ?")) {
+            statement.setString(1, roundId);
+            statement.setLong(2, tick);
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            throw new IllegalStateException("failed pruning snapshots for round " + roundId, e);
+        }
+    }
+
+    @Override
     public Optional<WorldSnapshot> latest() {
         try (Connection connection = dataSource.getConnection();
                 PreparedStatement statement = connection.prepareStatement(LATEST)) {

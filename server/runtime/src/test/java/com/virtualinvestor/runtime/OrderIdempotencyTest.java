@@ -33,7 +33,9 @@ class OrderIdempotencyTest {
         List<GameEvent> events = round.step();
 
         long accepted = events.stream()
-                .filter(e -> e instanceof GameEvent.OrderAccepted a && a.orderId().equals("token-1"))
+                .filter(e -> e instanceof GameEvent.OrderReport r
+                        && r.event() == com.virtualinvestor.core.domain.OrderEventKind.NEW
+                        && r.orderId().equals("token-1"))
                 .count();
         assertEquals(1, accepted, "the duplicate command must be ignored");
     }

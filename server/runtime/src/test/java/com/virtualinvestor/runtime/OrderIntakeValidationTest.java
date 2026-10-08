@@ -28,7 +28,9 @@ class OrderIntakeValidationTest {
 
     private static String rejectionReason(List<GameEvent> events, String orderId) {
         for (GameEvent event : events) {
-            if (event instanceof GameEvent.OrderRejected rejected && rejected.orderId().equals(orderId)) {
+            if (event instanceof GameEvent.OrderReport rejected
+                    && rejected.event() == com.virtualinvestor.core.domain.OrderEventKind.REJECTED
+                    && rejected.orderId().equals(orderId)) {
                 return rejected.reason();
             }
         }

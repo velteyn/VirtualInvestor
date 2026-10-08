@@ -14,17 +14,20 @@ export interface LiveOrder {
   filledQty: number;
   price: number;
   status: string;
+  reason: string;
 }
 
 export interface LivePosition {
   symbol: string;
   netQty: number;
   avgPrice: number;
+  realized: number;
 }
 
 export interface LiveAccount {
   cash: number;
   realizedPnl: number;
+  feesPaid: number;
 }
 
 export interface TradeState {
@@ -41,26 +44,42 @@ export class VirtualInvestorTradeFeed {
   private readonly listeners = new Set<(state: TradeState) => void>();
   private readonly unsubscribe: () => void;
 
-  constructor(private readonly client: ServerClient) {
+  constructor(
+    private readonly client: ServerClient,
+    private readonly participantId: string,
+  ) {
     this.unsubscribe = client.onPayload((payload) => this.onPayload(payload));
   }
 
   private onPayload(payload: WirePayload): void {
+    // The stream is global: it carries every participant's orders. Mirror only ours —
+    // otherwise bot flow floods the book, buries our lines and stalls the overlays.
+    if (payload.type === 'order' && payload.participantId !== this.participantId) {
+      return;
+    }
+    if ((payload.type === 'position' || payload.type === 'account')
+      && payload.participantId !== undefined && payload.participantId !== this.participantId) {
+      return;
+    }
     if (payload.type === 'order') {
       const id = String(payload.orderId);
-      const status = String(payload.status);
-      if (status === 'cancelled' || status === 'rejected') {
+      // eslint-disable-next-line no-console
+      console.info(`[vi] order frame ${id} status=${String(payload.status)} filled=${String(payload.filledQty ?? 0)}`);
+      // The server sends uppercase OrderStatus names (WORKING/PARTIAL/FILLED/CANCELLED/REJECTED).
+      const status = String(payload.status).toUpperCase();
+      if (status === 'CANCELLED' || status === 'REJECTED' || status === 'FILLED') {
         this.orders.delete(id);
       } else {
         this.orders.set(id, {
           id,
           symbol: String(payload.symbol),
           side: payload.side === 'SELL' ? 'SELL' : 'BUY',
-          type: String(payload.type ?? 'MARKET'),
+          type: String(payload.orderType ?? 'MARKET'),
           qty: Number(payload.quantity ?? 0),
           filledQty: Number(payload.filledQty ?? 0),
           price: Number(payload.price ?? 0),
           status,
+          reason: payload.reason === null || payload.reason === undefined ? '' : String(payload.reason),
         });
       }
       this.emit();
@@ -70,11 +89,15 @@ export class VirtualInvestorTradeFeed {
       if (netQty === 0) {
         this.positions.delete(symbol);
       } else {
-        this.positions.set(symbol, { symbol, netQty, avgPrice: Number(payload.avgPrice) });
+        this.positions.set(symbol,
+          { symbol, netQty, avgPrice: Number(payload.avgPrice), realized: Number(payload.realized ?? 0) });
       }
       this.emit();
     } else if (payload.type === 'account') {
-      this.account = { cash: Number(payload.cash), realizedPnl: Number(payload.realizedPnl ?? 0) };
+      this.account = { cash: Number(payload.cash), realizedPnl: Number(payload.realizedPnl ?? 0),
+        feesPaid: Number(payload.feesPaid ?? 0) };
+      // eslint-disable-next-line no-console
+      console.info(`[vi] account cash=${payload.cash} realized=${payload.realizedPnl ?? 0} fees=${payload.feesPaid ?? 0}`);
       this.emit();
     }
   }
@@ -85,6 +108,19 @@ export class VirtualInvestorTradeFeed {
       positions: [...this.positions.values()],
       account: this.account,
     };
+  }
+
+  /**
+   * Clear the mirror (task 5.2). Called on reconnect just before the server replays the
+   * snapshot, so cancelled-while-away orders cannot linger as stale lines.
+   */
+  reset(): void {
+    // eslint-disable-next-line no-console
+    console.info('[vi] trade mirror reset');
+    this.orders.clear();
+    this.positions.clear();
+    this.account = null;
+    this.emit();
   }
 
   onChange(listener: (state: TradeState) => void): () => void {

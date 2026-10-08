@@ -34,5 +34,10 @@ Project-wide guidance for agents working in this repository.
 ## Repository conventions
 
 - Never commit unless explicitly asked.
+- Commit at the end of every archived feature: when an OpenSpec change is archived
+  (tasks complete, specs synced, change moved to `openspec/changes/archive/`), commit its
+  working-tree changes as one per-feature commit (`feat(scope): ...`, matching the existing
+  history style) before starting the next change. Do not let finished features accumulate
+  as uncommitted work, and do not bundle unrelated changes into one commit.
 - The OpenSpec change `virtualinvestor-foundation` governs the build; update its task checkboxes
   only when behavior is implemented and verified.

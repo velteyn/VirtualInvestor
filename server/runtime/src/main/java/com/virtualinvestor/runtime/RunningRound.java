@@ -73,6 +73,9 @@ public final class RunningRound {
     private static final double TRANSIENT_IMPACT = 20.0;
     private static final double TRANSIENT_DECAY = 0.97;
     private static final double REVERSION_STRENGTH = 0.02;
+    private static final double TOXICITY_FLOW_WEIGHT = 1000.0;
+    private static final double TOXICITY_VOL_WEIGHT = 1.0;
+    private static final double TOXICITY_DECAY = 0.97;
     /** A bot stops and is flattened once its equity falls to this fraction of starting capital. */
     private static final double RISK_FLOOR_FRACTION = 0.20;
 
@@ -84,6 +87,7 @@ public final class RunningRound {
     private final WorldClock clock;
     private final FundamentalModel fundamentals;
     private final VolatilityState volatility;
+    private final com.virtualinvestor.core.fundamental.FlowToxicity toxicity;
     private final Map<String, InstrumentEngine> engines;
     private final NewsEngine news;
     private final SessionSchedule schedule;
@@ -94,6 +98,7 @@ public final class RunningRound {
     private final TradeGateway gateway;
     private final CommandQueue commands;
     private final HumanParticipant player;
+    private final List<com.virtualinvestor.core.participant.HumanParticipant> extraHumans;
     private final List<BotParticipant> rivals;
     private final List<BotParticipant> institutions;
     private final List<Participant> participants;
@@ -109,6 +114,39 @@ public final class RunningRound {
     private final Map<String, Double> netFlow = new LinkedHashMap<>();
     /** Cumulative net flow since the round began, per instrument (for observation/tuning). */
     private final Map<String, Double> cumulativeFlow = new LinkedHashMap<>();
+    /**
+     * Live-bar aggregation (task 2.2): trade prints accumulate into the open 60-tick window
+     * per symbol — the same window the warm-up history bars cover — and a {@code BarClosed}
+     * is emitted when the window rolls. Bar times continue the history axis so the chart's
+     * warm-up bars and live bars share one time scale.
+     */
+    static final long BAR_TICKS = 60L;
+    private final Map<String, BarAccumulator> barWindows = new LinkedHashMap<>();
+    private final long barSeconds;
+    private final Map<String, Long> barBaseSec = new LinkedHashMap<>();
+
+    /** One forming OHLCV window. */
+    private static final class BarAccumulator {
+        final long window;
+        double open;
+        double high = Double.NEGATIVE_INFINITY;
+        double low = Double.POSITIVE_INFINITY;
+        double close;
+        long volume;
+
+        BarAccumulator(long window, double price, long quantity) {
+            this.window = window;
+            this.open = price;
+            print(price, quantity);
+        }
+
+        void print(double price, long quantity) {
+            high = Math.max(high, price);
+            low = Math.min(low, price);
+            close = price;
+            volume += quantity;
+        }
+    }
 
     private WorldJournal journal = WorldJournal.noop();
     private EventPublisher publisher = EventPublisher.noop();
@@ -123,6 +161,19 @@ public final class RunningRound {
     }
 
     public RunningRound(String roundId, long seed, LaunchConfig config, long stepMillis) {
+        this(roundId, seed, config, stepMillis, List.of());
+    }
+
+    /**
+     * Round with extra human seats (multiplayer-seats 1.1): each extra human trades
+     * as a distinct participant funded equally. Ranked rivals backfill the seats
+     * humans leave empty (first-N by roster); solo games are unchanged.
+     */
+    public RunningRound(String roundId, long seed, LaunchConfig config, long stepMillis,
+            List<com.virtualinvestor.core.participant.HumanParticipant> extraHumans) {
+        if (extraHumans.size() > 5) {
+            throw new IllegalArgumentException("at most 5 extra humans fit the 6 ranked seats");
+        }
         this.roundId = Objects.requireNonNull(roundId, "roundId");
         this.seed = seed;
         this.config = Objects.requireNonNull(config, "config");
@@ -130,6 +181,7 @@ public final class RunningRound {
             throw new IllegalArgumentException("stepMillis must be positive");
         }
         this.stepMillis = stepMillis;
+        this.barSeconds = Math.max(1L, BAR_TICKS * stepMillis / 1_000L);
 
         long durationTicks = config.durationTicks(stepMillis);
         this.universe = InstrumentUniverse.defaultUniverse();
@@ -152,6 +204,8 @@ public final class RunningRound {
         fundamentals.setOrderFlowImpact(new com.virtualinvestor.core.fundamental.OrderFlowImpact(
                 PERMANENT_IMPACT, TRANSIENT_IMPACT, TRANSIENT_DECAY, liquidity));
         fundamentals.setReversionStrength(REVERSION_STRENGTH);
+        this.toxicity = new com.virtualinvestor.core.fundamental.FlowToxicity(
+                TOXICITY_FLOW_WEIGHT, TOXICITY_VOL_WEIGHT, TOXICITY_DECAY, liquidity);
 
         this.engines = new LinkedHashMap<>();
         this.previousPrices = new LinkedHashMap<>();
@@ -190,10 +244,15 @@ public final class RunningRound {
         this.commands = new CommandQueue();
 
         this.player = new HumanParticipant("human", "You", config.startingCapital());
-        this.rivals = RivalRoster.rivals(config.startingCapital());
+        List<com.virtualinvestor.core.participant.HumanParticipant> humans = new ArrayList<>();
+        humans.add(player);
+        humans.addAll(extraHumans);
+        this.extraHumans = List.copyOf(extraHumans);
+        this.rivals = new ArrayList<>(
+                RivalRoster.rivals(config.startingCapital()).subList(0, Math.max(0, 6 - humans.size())));
         this.institutions = RivalRoster.institutions(config.startingCapital());
         this.participants = new ArrayList<>();
-        participants.add(player);
+        participants.addAll(humans);
         participants.addAll(rivals);
         participants.addAll(institutions);
 
@@ -205,21 +264,39 @@ public final class RunningRound {
         this.runners = buildRunners();
     }
 
+    /** One maker's toxicity response: sensitivity rises and tolerance falls by roster index. */
+    private static com.virtualinvestor.core.bot.MarketMakerStrategy makerFor(int index) {
+        return new com.virtualinvestor.core.bot.MarketMakerStrategy(0.02, 2.0, 0.001, 500L, 5, 2.0,
+                1.0 + 0.5 * index, 4.0 - 0.25 * index);
+    }
+
     private List<BotRunner> buildRunners() {
         List<BotRunner> built = new ArrayList<>();
-        com.virtualinvestor.core.bot.MarketMakerStrategy maker =
-                new com.virtualinvestor.core.bot.MarketMakerStrategy(0.02, 2.0, 0.001, 500L);
-        // Roster order: MARK, TIDE, LEDGER, BLITZ, VULTURE.
-        built.add(new BotRunner(rivals.get(0), null, maker, QUOTE_REFRESH_TICKS, tickFor("NVDO")));
-        built.add(new BotRunner(rivals.get(1), new com.virtualinvestor.core.bot.MomentumStrategy(0.0005, 30L), null, 0L));
-        built.add(new BotRunner(rivals.get(2), new com.virtualinvestor.core.bot.ValueStrategy(0.005, 30L), null, 0L));
-        built.add(new BotRunner(rivals.get(3), new com.virtualinvestor.core.bot.ScalperStrategy(0.0005, 20L), null, 0L));
-        built.add(new BotRunner(rivals.get(4), new com.virtualinvestor.core.bot.NewsHunterStrategy(0.01, 40L), null, 0L));
+        // Strategies key off bot names, not roster positions, so backfilled subsets
+        // behave identically to the same bots in a full roster. Refresh phases
+        // stagger by roster index so books don't all move on the same tick.
+        for (int i = 0; i < rivals.size(); i++) {
+            BotParticipant rival = rivals.get(i);
+            built.add(switch (rival.displayName()) {
+                case "MARK" -> new BotRunner(rival, null, makerFor(i), QUOTE_REFRESH_TICKS, tickFor("NVDO"), i);
+                case "TIDE" -> new BotRunner(rival,
+                        new com.virtualinvestor.core.bot.MomentumStrategy(0.0005, 30L), null, 0L);
+                case "LEDGER" -> new BotRunner(rival,
+                        new com.virtualinvestor.core.bot.ValueStrategy(0.005, 30L), null, 0L);
+                case "BLITZ" -> new BotRunner(rival,
+                        new com.virtualinvestor.core.bot.ScalperStrategy(0.0005, 20L), null, 0L);
+                case "VULTURE" -> new BotRunner(rival,
+                        new com.virtualinvestor.core.bot.NewsHunterStrategy(0.01, 40L), null, 0L);
+                default -> throw new IllegalArgumentException("unknown rival: " + rival.displayName());
+            });
+        }
         // Institutions: ATLAS and CROWN provide liquidity; MERIDIAN trades macro news.
-        built.add(new BotRunner(institutions.get(0), null, maker, QUOTE_REFRESH_TICKS, tickFor("NVDO")));
+        built.add(new BotRunner(institutions.get(0), null, makerFor(rivals.size()), QUOTE_REFRESH_TICKS,
+                tickFor("NVDO"), rivals.size()));
         built.add(new BotRunner(institutions.get(1),
                 new com.virtualinvestor.core.bot.MacroReactionStrategy(0.01, 1_000L), null, 0L));
-        built.add(new BotRunner(institutions.get(2), null, maker, QUOTE_REFRESH_TICKS, tickFor("NVDO")));
+        built.add(new BotRunner(institutions.get(2), null, makerFor(rivals.size() + 2),
+                QUOTE_REFRESH_TICKS, tickFor("NVDO"), rivals.size() + 2));
         return List.copyOf(built);
     }
 
@@ -291,8 +368,17 @@ public final class RunningRound {
                     breakers.put(symbol, config.preset().newCircuitBreaker(open));
                 }
             }
-            warmup.seedBooks(engines.values(), fundamentals, rivals.get(0).id());
+            warmup.seedBooks(engines.values(), fundamentals,
+                    rivals.isEmpty() ? institutions.get(0).id() : rivals.get(0).id());
             warmedUp = true;
+            // Anchor the live-bar axis on the history it continues: live window w closes at
+            // lastHistoryTime + (w + 1) * barSeconds.
+            for (Map.Entry<String, List<Bar>> entry : history.entrySet()) {
+                List<Bar> bars = entry.getValue();
+                if (!bars.isEmpty()) {
+                    barBaseSec.put(entry.getKey(), bars.get(bars.size() - 1).timeSec());
+                }
+            }
         }
         session.begin();
         lifecycle.transitionTo(RoundState.RUNNING);
@@ -331,6 +417,12 @@ public final class RunningRound {
                 fundamentals.applyFlow(entry.getKey(), entry.getValue());
             }
         }
+        // Toxicity sees every symbol every tick (zero flow still decays the score).
+        for (Instrument instrument : universe.all()) {
+            String symbol = instrument.ticker();
+            toxicity.observe(symbol, netFlow.getOrDefault(symbol, 0.0),
+                    Math.max(0.0, volatility.multiplier(symbol) - 1.0));
+        }
         netFlow.clear();
 
 
@@ -359,7 +451,7 @@ public final class RunningRound {
                     }
                     long netPosition = runner.participant().account().position(symbol).netQty();
                     events.addAll(runner.act(engine, fundamental, vol, change, netPosition, tick, equity,
-                            fill -> applyFill(fill, symbol)));
+                            toxicity(symbol), fill -> applyFill(fill, symbol, events, tick)));
                 }
             }
         }
@@ -376,8 +468,58 @@ public final class RunningRound {
             events.addAll(margin.enforce(participant, marks, tick));
         }
 
+        events.addAll(formBarEvents(events, tick));
+
         publish(events);
         return List.copyOf(events);
+    }
+
+    /**
+     * Fold the step's own trade prints into the open bar windows and close every window
+     * the tick has rolled past. A window with no prints stays open until its first print,
+     * so a closed bar always reflects real prints, never synthesis.
+     */
+    private List<GameEvent> formBarEvents(List<GameEvent> events, long tick) {
+        long currentWindow = tick / BAR_TICKS;
+        List<GameEvent> bars = new ArrayList<>();
+        for (GameEvent event : events) {
+            if (event instanceof GameEvent.TradePrinted trade) {
+                long window = trade.tick() / BAR_TICKS;
+                BarAccumulator acc = barWindows.get(trade.symbol());
+                if (acc != null && acc.window != window) {
+                    // The print rolled into a new window: close the old one first so no
+                    // prints are ever dropped, even for symbols that trade sporadically.
+                    bars.add(closedBar(trade.symbol(), acc));
+                    acc = null;
+                }
+                if (acc == null) {
+                    barWindows.put(trade.symbol(), new BarAccumulator(window, trade.price(), trade.quantity()));
+                } else {
+                    acc.print(trade.price(), trade.quantity());
+                }
+            }
+        }
+        var iterator = barWindows.entrySet().iterator();
+        while (iterator.hasNext()) {
+            var entry = iterator.next();
+            BarAccumulator acc = entry.getValue();
+            if (acc.window < currentWindow) {
+                bars.add(closedBar(entry.getKey(), acc));
+                iterator.remove();
+            }
+        }
+        return bars;
+    }
+
+    /** A closed window as the wire-ready bar event, timed on the history axis. */
+    private GameEvent.BarClosed closedBar(String symbol, BarAccumulator acc) {
+        long base = barBaseSec.getOrDefault(symbol, 1_700_000_000L);
+        return new GameEvent.BarClosed(symbol, barInterval(), base + (acc.window + 1L) * barSeconds,
+                acc.open, acc.high, acc.low, acc.close, acc.volume, acc.window * BAR_TICKS);
+    }
+
+    private String barInterval() {
+        return barSeconds >= 60L ? (barSeconds / 60L) + "m" : barSeconds + "s";
     }
 
     private void handleTransition(SessionTransition transition, long tick, List<GameEvent> events) {
@@ -421,8 +563,8 @@ public final class RunningRound {
             if (result.traded()) {
                 engine.setLastPrice(result.clearingPrice());
                 for (AuctionFill fill : result.fills()) {
-                    participant(fill.participantId()).account()
-                            .applyFill(symbol, fill.side(), fill.quantity(), fill.price());
+                    creditFill(fill.participantId(), symbol, fill.side(), fill.quantity(), fill.price(),
+                            events, tick);
                 }
             }
             events.add(new GameEvent.AuctionClosed(
@@ -442,12 +584,35 @@ public final class RunningRound {
         clock.stop();
     }
 
+    /**
+     * Game-master early settlement (player-accounts 3.3): close the round now at
+     * current marks and publish the settlement events. No-op once settled.
+     */
+    public List<GameEvent> settleNow() {
+        if (settled) {
+            return List.of();
+        }
+        // Honor the lifecycle ladder (RUNNING -> CLOSING -> SETTLED); no step runs
+        // between these transitions, so the round simply closes at current marks.
+        if (lifecycle.state() == RoundState.PAUSED) {
+            lifecycle.transitionTo(RoundState.RUNNING);
+        }
+        if (lifecycle.state() == RoundState.RUNNING) {
+            lifecycle.transitionTo(RoundState.CLOSING);
+        }
+        List<GameEvent> events = new ArrayList<>();
+        settle(clock.tick(), events);
+        publish(events);
+        return List.copyOf(events);
+    }
+
     /** Credit both counterparties of a fill and record its aggressive flow. */
-    private void applyFill(com.virtualinvestor.core.book.Fill fill, String symbol) {
-        participant(fill.takerParticipantId()).account()
-                .applyFill(symbol, fill.takerSide(), fill.quantity(), fill.price());
-        participant(fill.makerParticipantId()).account()
-                .applyFill(symbol, fill.makerSide(), fill.quantity(), fill.price());
+    private void applyFill(com.virtualinvestor.core.book.Fill fill, String symbol, List<GameEvent> events,
+            long tick) {
+        creditFill(fill.takerParticipantId(), symbol, fill.takerSide(), fill.quantity(), fill.price(),
+                events, tick);
+        creditFill(fill.makerParticipantId(), symbol, fill.makerSide(), fill.quantity(), fill.price(),
+                events, tick);
         // The taker is the aggressor: buy flow positive, sell flow negative.
         double signed = fill.takerSide() == com.virtualinvestor.core.domain.OrderSide.BUY
                 ? fill.quantity() : -fill.quantity();
@@ -455,10 +620,28 @@ public final class RunningRound {
         cumulativeFlow.merge(symbol, signed, Double::sum);
     }
 
+    /** Credit one counterparty of a fill and publish its position and account. */
+    private void creditFill(String participantId, String symbol,
+            com.virtualinvestor.core.domain.OrderSide side, long quantity, double price,
+            List<GameEvent> events, long tick) {
+        com.virtualinvestor.core.participant.Account account = participant(participantId).account();
+        account.applyFill(symbol, side, quantity, price);
+        // Broker tariffs (player-accounts 5.1): each counterparty pays its own bank's
+        // schedule on the fill, deducted from cash and accumulated visibly as fees paid.
+        account.debitFee(feesFor(participantId).feeFor(quantity));
+        com.virtualinvestor.core.participant.Position position = account.position(symbol);
+        events.add(new GameEvent.PositionUpdated(participantId, symbol, position.netQty(),
+                position.avgPrice(), position.realized(), tick));
+        events.add(new GameEvent.AccountUpdated(participantId, account.cash(), account.realizedPnl(),
+                account.feesPaid(), tick));
+    }
+
     private static List<GameEvent> rejected(Command.PlaceOrder place, String reason, long tick) {
-        return List.of(
-                new GameEvent.OrderAccepted(place.commandId(), place.participantId(), place.symbol(), tick),
-                new GameEvent.OrderRejected(place.commandId(), place.participantId(), place.symbol(), reason, tick));
+        return List.of(new GameEvent.OrderReport(
+                place.commandId(), place.participantId(), place.symbol(), place.side(), place.type(),
+                place.quantity(), place.price(), 0L, place.quantity(),
+                com.virtualinvestor.core.domain.OrderStatus.REJECTED,
+                com.virtualinvestor.core.domain.OrderEventKind.REJECTED, reason, tick));
     }
 
     private List<GameEvent> applyCommand(Command command, long tick) {
@@ -474,8 +657,11 @@ public final class RunningRound {
                     auction.submit(new AuctionOrder(
                             place.commandId(), place.participantId(), place.side(), place.quantity(),
                             place.price(), place.type() == OrderType.MARKET));
-                    return List.of(new GameEvent.OrderAccepted(
-                            place.commandId(), place.participantId(), place.symbol(), tick));
+                    return List.of(new GameEvent.OrderReport(
+                            place.commandId(), place.participantId(), place.symbol(), place.side(), place.type(),
+                            place.quantity(), place.price(), 0L, place.quantity(),
+                            com.virtualinvestor.core.domain.OrderStatus.WORKING,
+                            com.virtualinvestor.core.domain.OrderEventKind.NEW, null, tick));
                 }
             }
             if (phase != SessionPhase.CONTINUOUS) {
@@ -500,10 +686,11 @@ public final class RunningRound {
             InstrumentEngine.SubmitResult result = engine.submitWithFills(new IncomingOrder(
                     place.commandId(), place.participantId(), place.symbol(), place.side(), place.type(),
                     place.quantity(), place.price()), tick);
+            List<GameEvent> events = new ArrayList<>(result.events());
             for (com.virtualinvestor.core.book.Fill fill : result.fills()) {
-                applyFill(fill, place.symbol());
+                applyFill(fill, place.symbol(), events, tick);
             }
-            return result.events();
+            return events;
         }
         if (command instanceof Command.CancelOrder cancel) {
             for (InstrumentEngine engine : engines.values()) {
@@ -517,7 +704,29 @@ public final class RunningRound {
         return List.of();
     }
 
-    private Participant participant(String id) {
+    /** Lookup by id for snapshots and the edge resync path. */
+    /** Current flow toxicity per symbol (realistic-liquidity 2.1); makers read it in 2.2. */
+    public double toxicity(String symbol) {
+        return toxicity.toxicity(symbol);
+    }
+
+    /** Fee tariff per participant; absent means no bank, no fees. */
+    private final Map<String, FeeSchedule> feeSchedules = new LinkedHashMap<>();
+
+    public void setFeeSchedule(String participantId, FeeSchedule schedule) {
+        feeSchedules.put(participantId, java.util.Objects.requireNonNull(schedule, "schedule"));
+    }
+
+    private FeeSchedule feesFor(String participantId) {
+        return feeSchedules.getOrDefault(participantId, FeeSchedule.none());
+    }
+
+    /** The tariff a seat traded under (portfolio-tab 2.1 prices history rows with it). */
+    public FeeSchedule feeScheduleOf(String participantId) {
+        return feesFor(participantId);
+    }
+
+    public Participant participant(String id) {
         for (Participant candidate : participants) {
             if (candidate.id().equals(id)) {
                 return candidate;

@@ -39,9 +39,10 @@ class WireMapperTest {
         Account account = new Account("h1", 100_000.0);
         assertEquals(100_000.0, WireMapper.account(account).cash(), 0.0);
 
-        WireMessage.PositionDto position = WireMapper.position("h1", new Position("ACME", 100L, 99.5));
+        WireMessage.PositionDto position = WireMapper.position("h1", new Position("ACME", 100L, 99.5, 12.5));
         assertEquals(100L, position.netQty());
         assertEquals(99.5, position.avgPrice(), 0.0);
+        assertEquals(12.5, position.realized(), 0.0);
     }
 
     @Test

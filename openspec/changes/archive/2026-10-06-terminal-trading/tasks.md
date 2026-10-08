@@ -27,9 +27,9 @@
 ## 5. Layout and reconciliation
 
 - [x] 5.1 Assemble the approved layout (chart left; rivals/watchlist/news right; order ticket + positions bottom) and verify all panels are visible and populated.
-- [ ] 5.2 Handle socket reconnect with a resync of orders, positions and account; verify the terminal reconciles after a dropped connection.
+- [x] 5.2 Handle socket reconnect with a resync of orders, positions and account; verify the terminal reconciles after a dropped connection.
 
 ## 6. Verification and docs
 
-- [ ] 6.1 End-to-end: start a round in the browser, watch the market tick, place a market order and a limit order, modify and cancel, and close a position — all reflected server-side.
-- [ ] 6.2 Document the terminal UI and its wiring in `docs/terminal.md`; verify the documented run steps reproduce a tradeable terminal.
+- [x] 6.1 End-to-end: start a round in the browser, watch the market tick, place a market order and a limit order, modify and cancel, and close a position — all reflected server-side.
+- [x] 6.2 Document the terminal UI and its wiring in `docs/terminal.md`; verify the documented run steps reproduce a tradeable terminal.
