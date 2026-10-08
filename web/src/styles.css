@@ -770,3 +770,136 @@ body,
     border-radius: 0;
   }
 }
+
+/* ── lobby ────────────────────────────────────────────────────────────── */
+.vi-lobby {
+  max-width: 960px;
+  margin: 6vh auto;
+  padding: 28px;
+  background: #14161d;
+  border: 1px solid #232838;
+  border-radius: 12px;
+}
+
+.vi-lobby h2,
+.vi-lobby h3 {
+  margin: 0 0 12px;
+}
+
+.vi-lobby-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.vi-lobby-row button,
+.vi-table button,
+.vi-dialog button,
+.vi-waiting button {
+  padding: 8px 14px;
+  background: #26a69a;
+  color: #08130f;
+  font-weight: 600;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.vi-lobby-row button:disabled,
+.vi-table button:disabled,
+.vi-dialog button:disabled,
+.vi-waiting button:disabled {
+  opacity: 0.6;
+}
+
+.vi-table-wrap {
+  overflow-x: auto;
+}
+
+.vi-table {
+  width: 100%;
+  margin: 4px 0 12px;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.vi-table th,
+.vi-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #1c2030;
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.vi-table th {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+
+.vi-table tbody tr:hover td {
+  background: #161b28;
+}
+
+.vi-dim {
+  opacity: 0.55;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.vi-dialog {
+  margin-bottom: 16px;
+  padding: 16px;
+  background: #1c2030;
+  border: 1px solid #2a3046;
+  border-radius: 8px;
+}
+
+.vi-dialog label {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 13px;
+  opacity: 0.85;
+}
+
+.vi-dialog select {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: #14161d;
+  color: #c7ccd8;
+  border: 1px solid #2a3046;
+  border-radius: 6px;
+}
+
+.vi-waiting {
+  margin-top: 8px;
+  padding: 16px;
+  background: #1c2030;
+  border: 1px solid #2a3046;
+  border-radius: 8px;
+}
+
+.vi-waiting ul {
+  margin: 0 0 12px;
+  padding-left: 20px;
+}
+
+@media (max-width: 640px) {
+  .vi-lobby {
+    margin: 0;
+    border: none;
+    border-radius: 0;
+    padding: 16px;
+  }
+
+  /* Reclaim table width on phones: the round id adds nothing tappable. */
+  .vi-table .vi-dim {
+    display: none;
+  }
+}

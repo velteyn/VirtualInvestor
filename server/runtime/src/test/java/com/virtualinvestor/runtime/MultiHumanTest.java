@@ -101,4 +101,45 @@ class MultiHumanTest {
                 new HumanParticipant("human-6", "Fin", 100_000.0),
                 new HumanParticipant("human-7", "Gus", 100_000.0)), 24L));
     }
+
+    @Test
+    void joinThenStartBackfillsRoster() {
+        RunningRound round = round(List.of(), 25L);
+        round.hold();
+        assertEquals(com.virtualinvestor.core.domain.RoundState.WAITING, round.state());
+
+        round.joinHuman(new HumanParticipant("human-2", "Bo", 100_000.0));
+        assertEquals(2 + 4 + 3, round.participants().size(), "2 humans + 4 backfill bots + 3 institutions");
+        assertEquals(4, round.rivals().size());
+        assertEquals("BLITZ", round.rivals().get(3).displayName(), "VULTURE yields first");
+
+        round.start();
+        for (int i = 0; i < 4; i++) {
+            round.step();
+        }
+        round.enqueue(new Command.PlaceOrder("h1-buy", "human", "NVDO", OrderSide.BUY, OrderType.MARKET, 5L,
+                0.0, 0.0, 0L));
+        round.enqueue(new Command.PlaceOrder("h2-buy", "human-2", "NVDO", OrderSide.BUY, OrderType.MARKET, 5L,
+                0.0, 0.0, 0L));
+        round.step();
+        assertEquals(5L, round.participant("human").account().position("NVDO").netQty());
+        assertEquals(5L, round.participant("human-2").account().position("NVDO").netQty());
+
+        assertThrows(IllegalStateException.class,
+                () -> round.joinHuman(new HumanParticipant("human-3", "Cy", 100_000.0)),
+                "roster locks once the clock runs");
+    }
+
+    @Test
+    void fullRoomRefusesJoin() {
+        RunningRound round = round(List.of(), 26L);
+        for (int i = 2; i <= 6; i++) {
+            round.joinHuman(new HumanParticipant("human-" + i, "P" + i, 100_000.0));
+        }
+        assertTrue(round.rivals().isEmpty());
+        assertEquals(6 + 3, round.participants().size());
+        assertThrows(IllegalStateException.class,
+                () -> round.joinHuman(new HumanParticipant("human-7", "Gus", 100_000.0)),
+                "six seats is six seats");
+    }
 }

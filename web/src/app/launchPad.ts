@@ -1,17 +1,13 @@
 /**
  * The launch pad: the screen a player sees before a session. Approved players log
  * in first (new players register with a bank and wait for game-master approval),
- * then configure starting capital, session length and realism preset, create the
- * round on the server, and hand the resulting round to the terminal.
+ * then land in the lobby: live games, single-player start, room creation.
  */
-import type { BankResponse, RoundConfig, RoundResponse, ServerClient } from '../adapters/serverClient';
-
-const PRESETS: Array<RoundConfig['preset']> = ['ARCADE', 'REALISTIC', 'HARDCORE'];
-const CAPITALS = [25_000, 50_000, 100_000, 250_000, 1_000_000];
-const DURATIONS = [30, 60, 120];
+import type { BankResponse, RoundResponse, ServerClient } from '../adapters/serverClient';
+import { mountLobby } from './lobby';
 
 export interface LaunchPadHandlers {
-  onStarted(round: RoundResponse): void;
+  onStarted(round: RoundResponse, participant: string): void;
 }
 
 export function mountLaunchPad(
@@ -45,22 +41,6 @@ export function mountLaunchPad(
         <button id="vi-do-change">Set password</button>
       </div>
       <div id="vi-session" hidden>
-        <label>Starting capital
-          <select id="vi-capital">
-            ${CAPITALS.map((value) => `<option value="${value}"${value === 100_000 ? ' selected' : ''}>$${value.toLocaleString()}</option>`).join('')}
-          </select>
-        </label>
-        <label>Session length
-          <select id="vi-duration">
-            ${DURATIONS.map((value) => `<option value="${value}"${value === 30 ? ' selected' : ''}>${value} minutes</option>`).join('')}
-          </select>
-        </label>
-        <label>Realism
-          <select id="vi-preset">
-            ${PRESETS.map((value) => `<option value="${value}"${value === 'REALISTIC' ? ' selected' : ''}>${value}</option>`).join('')}
-          </select>
-        </label>
-        <button id="vi-start">Start session</button>
       </div>
       <p id="vi-error" class="vi-error" role="alert"></p>
     </div>`;
@@ -74,11 +54,18 @@ export function mountLaunchPad(
   const doRegister = root.querySelector<HTMLButtonElement>('#vi-do-register')!;
   const note = root.querySelector<HTMLParagraphElement>('#vi-auth-note')!;
   const session = root.querySelector<HTMLDivElement>('#vi-session')!;
-  const start = root.querySelector<HTMLButtonElement>('#vi-start')!;
   const error = root.querySelector<HTMLParagraphElement>('#vi-error')!;
 
   const fail = (cause: unknown): void => {
     error.textContent = cause instanceof Error ? cause.message : 'request failed';
+  };
+
+  /** Logged in: swap the auth form for the lobby. */
+  const enterLobby = (username: string): void => {
+    note.textContent = `Playing as ${username}.`;
+    session.hidden = false;
+    session.innerHTML = '';
+    mountLobby(session, client, handlers);
   };
 
   const changeBox = root.querySelector<HTMLDivElement>('#vi-change')!;
@@ -100,8 +87,7 @@ export function mountLaunchPad(
         note.textContent = `Welcome ${response.username} — set a password to continue.`;
         changeBox.hidden = false;
       } else {
-        note.textContent = `Playing as ${response.username} (${response.bankId}).`;
-        session.hidden = false;
+        enterLobby(response.username);
       }
     } catch (cause) {
       fail(cause);
@@ -122,8 +108,7 @@ export function mountLaunchPad(
       newPass.value = '';
       confirmPass.value = '';
       changeBox.hidden = true;
-      note.textContent = `Playing as ${lastUsername}.`;
-      session.hidden = false;
+      enterLobby(lastUsername);
     } catch (cause) {
       fail(cause);
     } finally {
@@ -155,27 +140,6 @@ export function mountLaunchPad(
       fail(cause);
     } finally {
       doRegister.disabled = false;
-    }
-  });
-
-  const capital = root.querySelector<HTMLSelectElement>('#vi-capital')!;
-  const duration = root.querySelector<HTMLSelectElement>('#vi-duration')!;
-  const preset = root.querySelector<HTMLSelectElement>('#vi-preset')!;
-
-  start.addEventListener('click', async () => {
-    start.disabled = true;
-    error.textContent = '';
-    try {
-      const round = await client.createRound({
-        startingCapital: Number(capital.value),
-        durationMinutes: Number(duration.value),
-        preset: preset.value as RoundConfig['preset'],
-      });
-      handlers.onStarted(round);
-    } catch (cause) {
-      fail(cause);
-    } finally {
-      start.disabled = false;
     }
   });
 }

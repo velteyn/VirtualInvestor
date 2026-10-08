@@ -98,11 +98,14 @@ public final class RunningRound {
     private final TradeGateway gateway;
     private final CommandQueue commands;
     private final HumanParticipant player;
-    private final List<com.virtualinvestor.core.participant.HumanParticipant> extraHumans;
-    private final List<BotParticipant> rivals;
+    /** All humans in join order (player first); mutable pre-start for room joins. */
+    private final List<com.virtualinvestor.core.participant.HumanParticipant> humans = new ArrayList<>();
+    private final List<com.virtualinvestor.core.participant.HumanParticipant> extraHumans = new ArrayList<>();
+    private List<BotParticipant> rivals;
     private final List<BotParticipant> institutions;
-    private final List<Participant> participants;
-    private final List<BotRunner> runners;
+    private final List<Participant> participants = new ArrayList<>();
+    private List<BotRunner> runners;
+    private final long sessionTicks;
     private final Map<String, Double> previousPrices;
     private final Map<String, Double> startingCapitals;
     private final Map<String, MarketRules> marketRules = new LinkedHashMap<>();
@@ -171,6 +174,15 @@ public final class RunningRound {
      */
     public RunningRound(String roundId, long seed, LaunchConfig config, long stepMillis,
             List<com.virtualinvestor.core.participant.HumanParticipant> extraHumans) {
+        this(roundId, seed, config, stepMillis, extraHumans, "You");
+    }
+
+    /**
+     * As above with a display name for the first human seat (game-lobby 2.2):
+     * rooms show the master's username, solo games keep "You".
+     */
+    public RunningRound(String roundId, long seed, LaunchConfig config, long stepMillis,
+            List<com.virtualinvestor.core.participant.HumanParticipant> extraHumans, String playerName) {
         if (extraHumans.size() > 5) {
             throw new IllegalArgumentException("at most 5 extra humans fit the 6 ranked seats");
         }
@@ -243,25 +255,59 @@ public final class RunningRound {
         }
         this.commands = new CommandQueue();
 
-        this.player = new HumanParticipant("human", "You", config.startingCapital());
-        List<com.virtualinvestor.core.participant.HumanParticipant> humans = new ArrayList<>();
+        this.player = new HumanParticipant("human", playerName, config.startingCapital());
         humans.add(player);
         humans.addAll(extraHumans);
-        this.extraHumans = List.copyOf(extraHumans);
-        this.rivals = new ArrayList<>(
-                RivalRoster.rivals(config.startingCapital()).subList(0, Math.max(0, 6 - humans.size())));
+        this.sessionTicks = durationTicks;
         this.institutions = RivalRoster.institutions(config.startingCapital());
-        this.participants = new ArrayList<>();
+
+        this.startingCapitals = new LinkedHashMap<>();
+        rebuildRoster();
+    }
+
+    /**
+     * Rebuild the ranked roster from the current humans (game-lobby 1.2): rivals
+     * backfill first-N, so each join yields the last rival. Pre-start only — nothing
+     * has ticked, so fresh runners are identical to constructor-built ones.
+     */
+    private void rebuildRoster() {
+        extraHumans.clear();
+        for (com.virtualinvestor.core.participant.HumanParticipant human : humans) {
+            if (!human.id().equals(player.id())) {
+                extraHumans.add(human);
+            }
+        }
+        rivals = new ArrayList<>(
+                RivalRoster.rivals(config.startingCapital()).subList(0, Math.max(0, 6 - humans.size())));
+        participants.clear();
         participants.addAll(humans);
         participants.addAll(rivals);
         participants.addAll(institutions);
-
-        this.startingCapitals = new LinkedHashMap<>();
         for (Participant participant : participants) {
-            startingCapitals.put(participant.id(), config.startingCapital());
+            startingCapitals.putIfAbsent(participant.id(), config.startingCapital());
         }
+        runners = buildRunners(sessionTicks);
+    }
 
-        this.runners = buildRunners(durationTicks);
+    /** Hold the built world for a room: the clock stays stopped until master start. */
+    public void hold() {
+        lifecycle.transitionTo(RoundState.WAITING);
+    }
+
+    /**
+     * Claim a ranked seat before the clock runs (game-lobby 1.2): appends the human
+     * and yields the last roster rival. Refused once ticked and when full.
+     */
+    public void joinHuman(com.virtualinvestor.core.participant.HumanParticipant human) {
+        RoundState state = lifecycle.state();
+        if (state != RoundState.CREATED && state != RoundState.WAITING) {
+            throw new IllegalStateException("roster is locked once the clock runs: state=" + state);
+        }
+        if (humans.size() >= 6) {
+            throw new IllegalStateException("room is full: 6 ranked seats claimed");
+        }
+        humans.add(Objects.requireNonNull(human, "human"));
+        rebuildRoster();
     }
 
     /** One maker's toxicity response: sensitivity rises and tolerance falls by roster index. */

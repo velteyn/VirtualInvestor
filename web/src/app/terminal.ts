@@ -18,17 +18,22 @@ export interface Terminal {
   destroy(): void;
 }
 
-const PARTICIPANT = 'human';
+const SOLO_PARTICIPANT = 'human';
 
-export function mountTerminal(root: HTMLElement, client: ServerClient, round: RoundResponse): Terminal {
+export function mountTerminal(
+  root: HTMLElement,
+  client: ServerClient,
+  round: RoundResponse,
+  participant: string = SOLO_PARTICIPANT,
+): Terminal {
   const dataFeed = new VirtualInvestorDataFeed(client, round.roundId);
-  const tradeFeed = new VirtualInvestorTradeFeed(client, PARTICIPANT);
+  const tradeFeed = new VirtualInvestorTradeFeed(client, participant);
   const newsFeed = new VirtualInvestorNewsFeed(client);
 
   // Join the round so order commands route to it, binding the logged-in player,
   // then pull the current snapshot so balance, positions and working orders
   // are populated on first load instead of waiting for a reconnect.
-  client.joinRound(round.roundId, PARTICIPANT);
+  client.joinRound(round.roundId, participant);
   client.resync();
 
   // On reconnect the client re-joins and replays the snapshot; clear the mirror first so
@@ -98,7 +103,7 @@ export function mountTerminal(root: HTMLElement, client: ServerClient, round: Ro
 
   // Order ticket below news in the right column (order-ticket 1.1).
   const column = layout.querySelector<HTMLElement>('.vi-column');
-  const ticket = column === null ? null : mountTicket(column, client, round, PARTICIPANT, tradeFeed);
+  const ticket = column === null ? null : mountTicket(column, client, round, participant, tradeFeed);
   prefillTicket = (order) => ticket?.prefill({
     side: order.side,
     type: (order.type === 'SL' ? 'STOP' : order.type) as 'MARKET' | 'LIMIT' | 'STOP' | 'STOP_LIMIT',
@@ -108,7 +113,7 @@ export function mountTerminal(root: HTMLElement, client: ServerClient, round: Ro
 
   // Portfolio tab wraps the positions strip (portfolio-tab 3.1).
   const strip = layout.querySelector<HTMLElement>('.vi-positions');
-  const portfolio = strip === null ? null : mountPortfolio(strip, client, round, PARTICIPANT, tradeFeed);
+  const portfolio = strip === null ? null : mountPortfolio(strip, client, round, participant, tradeFeed);
 
   // A small session banner (kept out of the way on narrow screens).
   const banner = document.createElement('div');

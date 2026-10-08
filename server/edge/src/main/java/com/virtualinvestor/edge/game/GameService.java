@@ -1,5 +1,6 @@
 package com.virtualinvestor.edge.game;
 
+import com.virtualinvestor.core.domain.RoundState;
 import com.virtualinvestor.core.game.LaunchConfig;
 import com.virtualinvestor.core.game.RivalRoster;
 import com.virtualinvestor.core.game.RoundLifecycle;
@@ -40,7 +41,16 @@ public class GameService {
     private final Map<String, RoundView> rounds = new ConcurrentHashMap<>();
     private final Map<String, Map<String, String>> roundPlayers = new ConcurrentHashMap<>();
     private final Map<String, RoundDurability> durability = new ConcurrentHashMap<>();
+    /** Waiting-room bookkeeping, keyed by round id (game-lobby 2.2). */
+    private final Map<String, RoomInfo> rooms = new ConcurrentHashMap<>();
     private long roundCounter = 0L;
+
+    /** Unstarted rooms vanish after this long (game-lobby 2.3). */
+    public static final long ROOM_TTL_MILLIS = 30L * 60_000L;
+
+    /** A held room: its master, human capacity is always the 6 ranked seats, and birth time. */
+    public record RoomInfo(String roundId, String masterPlayerId, long createdAtMillis) {
+    }
 
     /**
      * Boot-unique tag so round ids never collide with rows from previous server
@@ -285,6 +295,177 @@ public class GameService {
     /** All rounds this server created, for the game-master list. */
     public List<RoundView> rounds() {
         return List.copyOf(rounds.values());
+    }
+
+    /**
+     * Create a held room (game-lobby 2.2): the world is built for the master but the
+     * clock stays stopped; vacant seats backfill with bots whenever it starts.
+     */
+    public RoundView createRoom(LaunchConfig config, String masterPlayerId, boolean runInRealTime,
+            long stepMillis, long nowMillis) {
+        PlayerStore.Player master = players.store().findById(masterPlayerId)
+                .orElseThrow(() -> new IllegalArgumentException("unknown player: " + masterPlayerId));
+        if (master.status() != PlayerStore.Status.APPROVED) {
+            throw new SecurityException("player is not approved: " + masterPlayerId);
+        }
+        long seed = 20261002L + roundCounter;
+        String roundId = "round-" + (++roundCounter) + "-" + BOOT_TAG;
+        players.store().resetPurse(masterPlayerId, config.startingCapital());
+        Map<String, String> seats = new LinkedHashMap<>();
+        seats.put("human", masterPlayerId);
+        roundPlayers.put(roundId, seats);
+
+        RoundLifecycle lifecycle = new RoundLifecycle(roundId, seed, config);
+        lifecycle.transitionTo(RoundState.WAITING);
+        HumanParticipant player = new HumanParticipant("human", master.username(), config.startingCapital());
+        List<BotParticipant> rivals = RivalRoster.rivals(config.startingCapital());
+        List<BotParticipant> institutions = RivalRoster.institutions(config.startingCapital());
+        Map<String, Double> startingCapitals = new LinkedHashMap<>();
+        startingCapitals.put(player.id(), config.startingCapital());
+        for (BotParticipant rival : rivals) {
+            startingCapitals.put(rival.id(), config.startingCapital());
+        }
+        String rawToken = "session-" + roundId + "-" + seed;
+        sessionTokens.put(player.id(), rawToken);
+        RoundView view = new RoundView(roundId, seed, config, lifecycle, player, rivals, institutions,
+                startingCapitals, rawToken);
+        rounds.put(roundId, view);
+        rooms.put(roundId, new RoomInfo(roundId, masterPlayerId, nowMillis));
+
+        com.virtualinvestor.runtime.RunningRound live =
+                runtime.hold(roundId, seed, config, stepMillis, List.of(), runInRealTime,
+                        master.username());
+        attachJournal(roundId, live);
+        wireTariffs(live, seats);
+        live.addListener(events -> writeBackPurse(roundId, events));
+        return view;
+    }
+
+    /**
+     * Claim the next ranked seat in a waiting room (game-lobby 2.2). Returns the
+     * seat id. A room that fills to 6 humans starts itself on the claiming join.
+     */
+    public String joinRoom(String roundId, String playerId, long nowMillis) {
+        RoomInfo room = rooms.get(roundId);
+        if (room == null || rounds.get(roundId) == null) {
+            throw new IllegalArgumentException("unknown room: " + roundId);
+        }
+        com.virtualinvestor.runtime.RunningRound live = runtime.round(roundId)
+                .orElseThrow(() -> new IllegalArgumentException("unknown room: " + roundId));
+        Map<String, String> seats = roundPlayers.get(roundId);
+        Optional<String> existing = seatFor(roundId, playerId);
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+        if (live.state() != RoundState.WAITING) {
+            throw new IllegalStateException("room has started");
+        }
+        if (seats.size() >= 6) {
+            throw new IllegalStateException("room is full");
+        }
+        PlayerStore.Player player = players.store().findById(playerId)
+                .orElseThrow(() -> new IllegalArgumentException("unknown player: " + playerId));
+        if (player.status() != PlayerStore.Status.APPROVED) {
+            throw new SecurityException("player is not approved: " + playerId);
+        }
+        String seat = "human-" + (seats.size() + 1);
+        players.store().resetPurse(playerId, rounds.get(roundId).config().startingCapital());
+        seats.put(seat, playerId);
+        live.joinHuman(new HumanParticipant(seat, player.username(),
+                rounds.get(roundId).config().startingCapital()));
+        tariff(live, seat, player);
+        if (seats.size() >= 6) {
+            bootRoom(room);
+        }
+        return seat;
+    }
+
+    /**
+     * Master-start a waiting room (game-lobby 2.2): vacant seats stay backfilled
+     * with bots. Idempotent — starting a running room succeeds silently.
+     */
+    public void startRoom(String roundId, String playerId) {
+        RoomInfo room = rooms.get(roundId);
+        if (room == null || rounds.get(roundId) == null) {
+            throw new IllegalArgumentException("unknown room: " + roundId);
+        }
+        com.virtualinvestor.runtime.RunningRound live = runtime.round(roundId)
+                .orElseThrow(() -> new IllegalArgumentException("unknown room: " + roundId));
+        if (live.state() != RoundState.WAITING) {
+            return;
+        }
+        if (!room.masterPlayerId().equals(playerId)) {
+            throw new SecurityException("only the room master can start");
+        }
+        bootRoom(room);
+    }
+
+    private void bootRoom(RoomInfo room) {
+        runtime.boot(room.roundId());
+        RoundView view = rounds.get(room.roundId());
+        if (view != null) {
+            view.lifecycle().transitionTo(RoundState.WARMUP);
+            view.lifecycle().transitionTo(RoundState.RUNNING);
+        }
+    }
+
+    /**
+     * Drop unstarted rooms past their TTL (game-lobby 2.3): held worlds never
+     * ticked, so forgetting them leaves no journal rows, no driver, no lobby row.
+     */
+    public void expireRooms(long nowMillis) {
+        for (RoomInfo room : List.copyOf(rooms.values())) {
+            Optional<com.virtualinvestor.runtime.RunningRound> live = runtime.round(room.roundId());
+            boolean started = live.map(round -> round.state() != RoundState.WAITING).orElse(true);
+            if (!started && nowMillis - room.createdAtMillis() > ROOM_TTL_MILLIS) {
+                rooms.remove(room.roundId());
+                rounds.remove(room.roundId());
+                roundPlayers.remove(room.roundId());
+                durability.remove(room.roundId());
+                runtime.forget(room.roundId());
+            }
+        }
+    }
+
+    /** Lobby listing (game-lobby 2.1): every room and solo session with seats and leader. */
+    public List<GameListing> liveGames(long nowMillis) {
+        expireRooms(nowMillis);
+        List<GameListing> games = new ArrayList<>();
+        for (RoundView view : rounds.values()) {
+            String roundId = view.roundId();
+            Optional<com.virtualinvestor.runtime.RunningRound> live = runtime.round(roundId);
+            String state = live.map(round -> round.state().name())
+                    .orElse(view.lifecycle().state().name());
+            boolean room = rooms.containsKey(roundId);
+            int taken = roundPlayers.getOrDefault(roundId, Map.of()).size();
+            long tick = live.map(com.virtualinvestor.runtime.RunningRound::tick).orElse(0L);
+            long stepMillis = live.map(com.virtualinvestor.runtime.RunningRound::stepMillis)
+                    .orElse(com.virtualinvestor.runtime.RunningRound.DEFAULT_STEP_MILLIS);
+            long total = view.config().durationTicks(stepMillis);
+            String leader = leaderboard(roundId, Map.of()).stream()
+                    .map(Standing::displayName)
+                    .findFirst()
+                    .orElse("—");
+            List<String> humans = new ArrayList<>();
+            for (String playerId : roundPlayers.getOrDefault(roundId, Map.of()).values()) {
+                humans.add(players.store().findById(playerId)
+                        .map(PlayerStore.Player::username).orElse(playerId));
+            }
+            games.add(new GameListing(roundId, room ? "room" : "solo", state,
+                    view.config().preset().name(), Math.max(0L, (total - tick) * stepMillis),
+                    taken, room ? 6 : 1, leader,
+                    room ? rooms.get(roundId).masterPlayerId() : null, humans,
+                    view.config().startingCapital(), view.config().durationMinutes()));
+        }
+        games.sort((a, b) -> a.roundId().compareTo(b.roundId()));
+        return games;
+    }
+
+    /** One lobby row. */
+    public record GameListing(String roundId, String kind, String state, String preset,
+            long timeLeftMillis, int seatsTaken, int seatsTotal, String leader,
+            String masterPlayerId, List<String> humans, double startingCapital,
+            long durationMinutes) {
     }
 
     /** The seat a player holds in a round, if the round seated them (multiplayer-seats 2.3). */

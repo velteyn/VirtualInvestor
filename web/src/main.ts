@@ -16,11 +16,11 @@ if (app === null) {
 const client = new ServerClient();
 
 mountLaunchPad(app, client, {
-  onStarted(round) {
+  onStarted(round, participant) {
     app.innerHTML = '';
     const terminalRoot = document.createElement('div');
     terminalRoot.className = 'vi-terminal';
     app.appendChild(terminalRoot);
-    mountTerminal(terminalRoot, client, round);
+    mountTerminal(terminalRoot, client, round, participant);
   },
 });

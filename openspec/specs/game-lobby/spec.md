@@ -4,7 +4,7 @@
 The meeting place after login: list live games, create solo sessions or held
 rooms, join waiting rooms, and let the master start when ready.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Lobby listing
 
@@ -40,8 +40,8 @@ creator as room master.
 
 #### Scenario: Created room waits
 
-- **WHEN** a master creates a room for three humans
-- **THEN** the world exists, no tick advances, and the room lists as waiting with 1 of 3 claimed
+- **WHEN** a master creates a room
+- **THEN** the world exists, no tick advances, and the room lists as waiting with 1 of 6 claimed
 
 ### Requirement: Join waiting rooms
 
@@ -71,7 +71,7 @@ master seated.
 
 #### Scenario: Master starts a partial room
 
-- **WHEN** the master starts a room with 2 of 4 seats claimed
+- **WHEN** the master starts a room with 2 of 6 seats claimed
 - **THEN** the clock runs with 2 humans and 4 backfill bots
 
 #### Scenario: Full room starts itself

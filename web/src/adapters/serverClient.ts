@@ -30,6 +30,36 @@ export interface SymbolResponse {
   assetClass: string;
 }
 
+export interface GameListing {
+  roundId: string;
+  kind: 'room' | 'solo';
+  state: string;
+  preset: string;
+  timeLeftMillis: number;
+  seatsTaken: number;
+  seatsTotal: number;
+  leader: string;
+  masterPlayerId: string | null;
+  humans: string[];
+  startingCapital: number;
+  durationMinutes: number;
+}
+
+export interface RoomResponse {
+  roundId: string;
+  state: string;
+  seatsTaken: number;
+  seatsTotal: number;
+  masterPlayerId: string;
+  sessionToken: string;
+}
+
+export interface JoinResponse {
+  roundId: string;
+  seat: string;
+  state: string;
+}
+
 export interface HistoryBar {
   time: number;
   open: number;
@@ -112,6 +142,7 @@ export class ServerClient {
   private lastJoin: { roundId: string; participantId: string } | null = null;
   private loginToken: string | null = null;
   private loginBankId: string | null = null;
+  private loginPlayerId: string | null = null;
   private wasConnected = false;
 
   constructor(baseUrl = '') {
@@ -128,7 +159,12 @@ export class ServerClient {
       const text = await response.text().catch(() => '');
       throw new Error(`POST ${path} failed (${response.status})${text ? `: ${text}` : ''}`);
     }
-    return (await response.json()) as T;
+    // Void endpoints (204 control/start, empty 200s) carry no JSON body.
+    const text = await response.text();
+    if (text === '') {
+      return undefined as T;
+    }
+    return JSON.parse(text) as T;
   }
 
   createRound(config: RoundConfig): Promise<RoundResponse> {
@@ -166,7 +202,33 @@ export class ServerClient {
     const response = await this.post<LoginResponse>('/api/players/login', { username, password });
     this.loginToken = response.sessionToken;
     this.loginBankId = response.bankId;
+    this.loginPlayerId = response.playerId;
     return response;
+  }
+
+  /** The logged-in player's id, for master checks in the lobby. */
+  playerId(): string | null {
+    return this.loginPlayerId;
+  }
+
+  /** Lobby: every live solo session and waiting room. */
+  liveGames(): Promise<GameListing[]> {
+    return this.post<GameListing[]>('/api/rounds/live', {});
+  }
+
+  /** Create a held room; the creator is room master on seat `human`. */
+  createRoom(config: RoundConfig): Promise<RoomResponse> {
+    return this.post<RoomResponse>('/api/rooms', { ...config, sessionToken: this.loginToken });
+  }
+
+  /** Claim the next seat in a waiting room (idempotent for seated players). */
+  joinRoom(roundId: string): Promise<JoinResponse> {
+    return this.post<JoinResponse>('/api/rooms/join', { roundId, sessionToken: this.loginToken });
+  }
+
+  /** Master-start a waiting room (idempotent once running). */
+  startRoom(roundId: string): Promise<void> {
+    return this.post<void>('/api/rooms/start', { roundId, sessionToken: this.loginToken });
   }
 
   /** The logged-in player's bank, for fee previews (order-ticket 1.4). */

@@ -54,7 +54,8 @@ public final class RoundLifecycle {
 
     public static boolean allowed(RoundState current, RoundState next) {
         return switch (current) {
-            case CREATED -> next == RoundState.WARMUP;
+            case CREATED -> next == RoundState.WARMUP || next == RoundState.WAITING;
+            case WAITING -> next == RoundState.WARMUP;
             case WARMUP -> next == RoundState.RUNNING;
             case RUNNING -> next == RoundState.CLOSING || next == RoundState.PAUSED;
             case PAUSED -> next == RoundState.RUNNING;

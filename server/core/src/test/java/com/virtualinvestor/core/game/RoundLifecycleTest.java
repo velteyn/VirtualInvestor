@@ -52,6 +52,20 @@ class RoundLifecycleTest {
     }
 
     @Test
+    void waitingPathHoldsRoomsBeforeWarmup() {
+        RoundLifecycle round = lifecycle();
+        round.transitionTo(RoundState.WAITING);
+        assertEquals(RoundState.WAITING, round.state());
+
+        assertThrows(IllegalStateException.class, () -> round.transitionTo(RoundState.RUNNING));
+        assertThrows(IllegalStateException.class, () -> round.transitionTo(RoundState.WAITING));
+
+        round.transitionTo(RoundState.WARMUP);
+        round.transitionTo(RoundState.RUNNING);
+        assertEquals(RoundState.RUNNING, round.state());
+    }
+
+    @Test
     void signatureCapturesSeedAndConfig() {
         RoundLifecycle round = lifecycle();
         assertTrue(round.signature().contains("seed=42"));

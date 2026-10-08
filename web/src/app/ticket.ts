@@ -82,6 +82,10 @@ export function maxAffordable(cash: number, price: number): number {
   return Math.max(0, Math.floor(cash / price));
 }
 
+// Per-page sequence; paired with a millisecond stamp so tokens are unique per
+// sender intent across pages and reloads. The server dedupes by token per
+// round, so two players (or a reload) reusing bare sequence numbers would
+// silently drop each other's orders (game-lobby 4.1).
 let ticketCounter = 0;
 
 export function mountTicket(
@@ -244,7 +248,7 @@ export function mountTicket(
     }
     const type = typeSelect.value as TicketType;
     const command: OrderCommand = {
-      clientToken: `tk-${++ticketCounter}`,
+      clientToken: `tk-${Date.now().toString(36)}-${++ticketCounter}`,
       symbol: symbol(),
       side,
       type,

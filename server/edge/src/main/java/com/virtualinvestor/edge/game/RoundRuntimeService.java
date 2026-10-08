@@ -4,6 +4,7 @@ import com.virtualinvestor.core.clock.RealTimeDriver;
 import com.virtualinvestor.core.command.Command;
 import com.virtualinvestor.core.domain.RoundState;
 import com.virtualinvestor.core.game.LaunchConfig;
+import com.virtualinvestor.core.participant.HumanParticipant;
 import com.virtualinvestor.edge.wire.WireMessage;
 import com.virtualinvestor.runtime.RunningRound;
 import java.util.List;
@@ -23,6 +24,8 @@ public class RoundRuntimeService {
     private final RoundBroadcaster broadcaster;
     private final Map<String, RunningRound> rounds = new ConcurrentHashMap<>();
     private final Map<String, RealTimeDriver> drivers = new ConcurrentHashMap<>();
+    /** Held rooms remember whether to drive in real time once started. */
+    private final Map<String, Boolean> realTime = new ConcurrentHashMap<>();
 
     public RoundRuntimeService(RoundBroadcaster broadcaster) {
         this.broadcaster = broadcaster;
@@ -57,6 +60,54 @@ public class RoundRuntimeService {
 
     public Optional<RunningRound> round(String roundId) {
         return Optional.ofNullable(rounds.get(roundId));
+    }
+
+    /**
+     * Build a room's world and hold it (game-lobby 2.2): warm-up and roster exist,
+     * the clock never starts, so joins rewire the roster freely until master start.
+     */
+    public RunningRound hold(String roundId, long seed, LaunchConfig config, long stepMillis,
+            List<HumanParticipant> extras, boolean runInRealTime) {
+        return hold(roundId, seed, config, stepMillis, extras, runInRealTime, "You");
+    }
+
+    /** As above with a display name for the first human seat (the room master). */
+    public RunningRound hold(String roundId, long seed, LaunchConfig config, long stepMillis,
+            List<HumanParticipant> extras, boolean runInRealTime, String playerName) {
+        RunningRound round = new RunningRound(roundId, seed, config, stepMillis, extras, playerName);
+        round.setPublisher(broadcaster);
+        broadcaster.bindEngines(() -> round.engines().values().stream().toList());
+        round.hold();
+        rounds.put(roundId, round);
+        realTime.put(roundId, runInRealTime);
+        return round;
+    }
+
+    /**
+     * Master-start a held room: boot the clock and the real-time driver.
+     * Idempotent — starting a running room is a no-op success.
+     */
+    public void boot(String roundId) {
+        RunningRound round = rounds.get(roundId);
+        if (round == null) {
+            throw new IllegalArgumentException("unknown round: " + roundId);
+        }
+        if (round.state() != RoundState.WAITING) {
+            return;
+        }
+        round.start();
+        if (Boolean.TRUE.equals(realTime.get(roundId))) {
+            RealTimeDriver driver = new RealTimeDriver(round.clock(), round::stepQuietly);
+            drivers.put(roundId, driver);
+            driver.start();
+        }
+    }
+
+    /** Drop a round entirely (room expiry): stops any driver and forgets the world. */
+    public void forget(String roundId) {
+        stop(roundId);
+        rounds.remove(roundId);
+        realTime.remove(roundId);
     }
 
     /** Pause a running round: its clock stops advancing. */
