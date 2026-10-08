@@ -73,8 +73,8 @@ public final class RunningRound {
     private static final double TRANSIENT_IMPACT = 20.0;
     private static final double TRANSIENT_DECAY = 0.97;
     private static final double REVERSION_STRENGTH = 0.02;
-    private static final double TOXICITY_FLOW_WEIGHT = 1000.0;
-    private static final double TOXICITY_VOL_WEIGHT = 1.0;
+    private static final double TOXICITY_FLOW_WEIGHT = 500.0;
+    private static final double TOXICITY_VOL_WEIGHT = 0.25;
     private static final double TOXICITY_DECAY = 0.97;
     /** A bot stops and is flattened once its equity falls to this fraction of starting capital. */
     private static final double RISK_FLOOR_FRACTION = 0.20;
@@ -261,7 +261,7 @@ public final class RunningRound {
             startingCapitals.put(participant.id(), config.startingCapital());
         }
 
-        this.runners = buildRunners();
+        this.runners = buildRunners(durationTicks);
     }
 
     /** One maker's toxicity response: sensitivity rises and tolerance falls by roster index. */
@@ -270,7 +270,7 @@ public final class RunningRound {
                 1.0 + 0.5 * index, 4.0 - 0.25 * index);
     }
 
-    private List<BotRunner> buildRunners() {
+    private List<BotRunner> buildRunners(long sessionTicks) {
         List<BotRunner> built = new ArrayList<>();
         // Strategies key off bot names, not roster positions, so backfilled subsets
         // behave identically to the same bots in a full roster. Refresh phases
@@ -278,7 +278,8 @@ public final class RunningRound {
         for (int i = 0; i < rivals.size(); i++) {
             BotParticipant rival = rivals.get(i);
             built.add(switch (rival.displayName()) {
-                case "MARK" -> new BotRunner(rival, null, makerFor(i), QUOTE_REFRESH_TICKS, tickFor("NVDO"), i);
+                case "MARK" -> new BotRunner(rival, null, makerFor(i), QUOTE_REFRESH_TICKS, tickFor("NVDO"), i,
+                        sessionTicks);
                 case "TIDE" -> new BotRunner(rival,
                         new com.virtualinvestor.core.bot.MomentumStrategy(0.0005, 30L), null, 0L);
                 case "LEDGER" -> new BotRunner(rival,
@@ -292,11 +293,11 @@ public final class RunningRound {
         }
         // Institutions: ATLAS and CROWN provide liquidity; MERIDIAN trades macro news.
         built.add(new BotRunner(institutions.get(0), null, makerFor(rivals.size()), QUOTE_REFRESH_TICKS,
-                tickFor("NVDO"), rivals.size()));
+                tickFor("NVDO"), rivals.size(), sessionTicks));
         built.add(new BotRunner(institutions.get(1),
                 new com.virtualinvestor.core.bot.MacroReactionStrategy(0.01, 1_000L), null, 0L));
         built.add(new BotRunner(institutions.get(2), null, makerFor(rivals.size() + 2),
-                QUOTE_REFRESH_TICKS, tickFor("NVDO"), rivals.size() + 2));
+                QUOTE_REFRESH_TICKS, tickFor("NVDO"), rivals.size() + 2, sessionTicks));
         return List.copyOf(built);
     }
 

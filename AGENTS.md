@@ -33,7 +33,8 @@ Project-wide guidance for agents working in this repository.
 
 ## Repository conventions
 
-- Never commit unless explicitly asked.
+- Never commit unless explicitly asked — except at archive: completing an OpenSpec
+  archive is standing authorization to commit, so commit without asking.
 - Commit at the end of every archived feature: when an OpenSpec change is archived
   (tasks complete, specs synced, change moved to `openspec/changes/archive/`), commit its
   working-tree changes as one per-feature commit (`feat(scope): ...`, matching the existing

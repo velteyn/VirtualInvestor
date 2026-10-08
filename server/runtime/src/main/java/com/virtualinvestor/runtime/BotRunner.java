@@ -39,6 +39,28 @@ final class BotRunner {
     private final double tickSize;
     private final long baseSize;
     private final long phaseTicks;
+    /**
+     * Session length in ticks, for session-relative replenishment (book-replenishment 1.1):
+     * outer rungs requote at least a few times per session instead of on fixed slow
+     * multiples that never fire in short sessions. {@link Long#MAX_VALUE} preserves the
+     * legacy fixed quadratic cadence (used by unit tests pinning exact wave ticks).
+     */
+    private final long sessionTicks;
+
+    /**
+     * Refresh period of one ladder rung: quadratic in depth (touch fastest, outer rungs
+     * linger) but capped so every rung fires at least ~3x per session. Pure function of
+     * tick-math inputs, so replays agree.
+     */
+    static long rungPeriod(int level, long quoteRefreshTicks, long sessionTicks) {
+        long tier = (level + 1L) * (level + 1L);
+        long quadratic = quoteRefreshTicks * tier;
+        if (sessionTicks <= 0L) {
+            return quadratic;
+        }
+        long cap = Math.max(quoteRefreshTicks, sessionTicks / 3L);
+        return Math.min(quadratic, cap);
+    }
 
     private final List<String> restingQuoteIds = new ArrayList<>();
     private long sequence;
@@ -64,12 +86,18 @@ final class BotRunner {
 
     BotRunner(Participant participant, BotStrategy strategy, MarketMakerStrategy maker, long quoteRefreshTicks,
               double tickSize, long phaseTicks) {
+        this(participant, strategy, maker, quoteRefreshTicks, tickSize, phaseTicks, Long.MAX_VALUE);
+    }
+
+    BotRunner(Participant participant, BotStrategy strategy, MarketMakerStrategy maker, long quoteRefreshTicks,
+              double tickSize, long phaseTicks, long sessionTicks) {
         this.participant = participant;
         this.strategy = strategy;
         this.maker = maker;
         this.quoteRefreshTicks = quoteRefreshTicks;
         this.tickSize = tickSize;
         this.phaseTicks = phaseTicks;
+        this.sessionTicks = sessionTicks;
         this.baseSize = strategy != null ? 100L : QUOTE_SIZE;
     }
 
@@ -92,30 +120,40 @@ final class BotRunner {
             return List.of();
         }
         if (maker != null) {
-            if ((tick + phaseTicks) % quoteRefreshTicks != 0L) {
+            Quote quote = maker.quote(fundamental, volatility, netPosition, toxicity);
+            if (!rungDue(quote, tick)) {
                 return List.of();
             }
-            return refreshQuote(engine, fundamental, volatility, netPosition, tick, equity, toxicity, onFill);
+            return refreshQuote(engine, quote, fundamental, netPosition, tick, equity, onFill);
         }
         return take(engine, fundamental, volatility, priceChange, netPosition, tick, equity, onFill);
     }
 
+    /** Whether any ladder rung's session-relative wave lands on this tick. */
+    private boolean rungDue(Quote quote, long tick) {
+        int levels = Math.max(quote.bidLevels().size(), quote.askLevels().size());
+        for (int level = 0; level < levels; level++) {
+            if ((tick + phaseTicks) % rungPeriod(level, quoteRefreshTicks, sessionTicks) == 0L) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private List<GameEvent> refreshQuote(
-            InstrumentEngine engine, double fundamental, double volatility, long netPosition, long tick,
-            double equity, double toxicity, Consumer<Fill> onFill) {
+            InstrumentEngine engine, Quote quote, double fundamental, long netPosition, long tick,
+            double equity, Consumer<Fill> onFill) {
         List<GameEvent> events = new ArrayList<>();
-        Quote quote = maker.quote(fundamental, volatility, netPosition, toxicity);
         long size = sizeForEquity(equity, fundamental);
         String symbol = engine.symbol();
 
         // Desired ladder: touch first, deeper levels scaled by the equity-sized base.
-        // Tier i refreshes every (i+1)^2 cadences, so the touch leads and outer
-        // levels linger (realistic-liquidity 1.2) while 5-deep traffic stays
-        // under 2x the single-level baseline.
+        // Tier periods are session-relative (rungPeriod), so the touch leads and outer
+        // levels linger yet still rebuild in-session (book-replenishment 1.1) while
+        // 5-deep traffic stays under 2x the single-level baseline.
         List<DesiredLevel> desired = new ArrayList<>();
         for (int level = 0; level < quote.bidLevels().size(); level++) {
-            long tier = (level + 1L) * (level + 1L);
-            if ((tick + phaseTicks) % (quoteRefreshTicks * tier) != 0L) {
+            if ((tick + phaseTicks) % rungPeriod(level, quoteRefreshTicks, sessionTicks) != 0L) {
                 desired.add(null);
                 continue;
             }
@@ -124,8 +162,7 @@ final class BotRunner {
                     Math.round(rung.size() * size / (double) maker.baseSize())));
         }
         for (int level = 0; level < quote.askLevels().size(); level++) {
-            long tier = (level + 1L) * (level + 1L);
-            if ((tick + phaseTicks) % (quoteRefreshTicks * tier) != 0L) {
+            if ((tick + phaseTicks) % rungPeriod(level, quoteRefreshTicks, sessionTicks) != 0L) {
                 desired.add(null);
                 continue;
             }
@@ -194,12 +231,50 @@ final class BotRunner {
         long size = sizeForEquity(equity, engine.lastPrice());
         for (OrderIntent intent : intents) {
             long quantity = Math.min(intent.quantity(), size);
+            if (intent.type() == OrderType.MARKET) {
+                quantity = clampMarketTake(engine, intent.side(), quantity);
+                if (quantity <= 0L) {
+                    continue;
+                }
+            }
             String id = participant.id() + "-" + symbol + "-" + (sequence++);
             submit(engine, new IncomingOrder(
                     id, participant.id(), symbol, intent.side(), intent.type(), quantity, intent.price()),
                     tick, events, onFill);
         }
         return events;
+    }
+
+    /**
+     * Depth-aware taking (book-replenishment 2.1): a market order that cannot fill at all
+     * rejects with "no liquidity", so never send one into an empty touch — size to visible
+     * depth instead, and stand aside when the spread has blown out (deep fade). Limit
+     * orders rest and never reject, so they pass through untouched. Pure function of
+     * resting state, so replays agree.
+     */
+    private static long clampMarketTake(InstrumentEngine engine, OrderSide side, long quantity) {
+        OrderSide resting = side == OrderSide.BUY ? OrderSide.SELL : OrderSide.BUY;
+        long touch = engine.book().aggregateQuantity(resting, 1);
+        if (touch <= 0L) {
+            return 0L;
+        }
+        if (spreadBlownOut(engine)) {
+            return 0L;
+        }
+        return Math.min(quantity, touch);
+    }
+
+    /** Spread wider than 16% (4x the 4% base full spread) only happens in deep fade. */
+    private static final double MAX_TAKE_SPREAD_FRACTION = 0.16;
+
+    private static boolean spreadBlownOut(InstrumentEngine engine) {
+        Double bid = engine.book().bestBidPrice();
+        Double ask = engine.book().bestAskPrice();
+        if (bid == null || ask == null || bid <= 0.0) {
+            return false;
+        }
+        double mid = (bid + ask) / 2.0;
+        return (ask - bid) / mid > MAX_TAKE_SPREAD_FRACTION;
     }
 
     /** Snap a price onto the instrument's tick grid so it is a valid order price. */

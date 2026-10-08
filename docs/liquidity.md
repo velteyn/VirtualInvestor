@@ -66,12 +66,36 @@ tick + horizon (default 5 ticks): `fillPrice`, `markPrice`, and the signed `mark
 nothing and is skipped. Read them via `POST /api/rounds/markouts`; calibration consumes
 the same fold.
 
-## Known calibration gap
+## Tolerance backstop: a safety net, not a gameplay path
 
-The tolerance backstop (2.25–4.0) is currently unreachable through organic flow: the
-deepest sweep the book affords spikes toxicity to ~0.7, and the per-tick decay erases it
-before the 50-tick refresh wave completes. In live markets withdrawal happens through the
-fade-to-zero path plus consumption, never through the tolerance gate. If a future change
-needs genuine tolerance-gated withdrawal (all makers out at once), recalibrate first:
-slower decay, lower tolerances, or deeper ladders — and re-baseline bot economics as in
+The tolerance backstop (2.25–4.0) is deliberately unreachable through organic flow: the
+deepest sweep the book affords spikes toxicity to ~0.5, well short of the 2.25 floor, and
+the per-tick decay erases it between refresh waves. In live markets withdrawal happens
+through the fade-to-zero path plus consumption, never through the tolerance gate — and that is the
+desired behavior: genuine all-makers-out-at-once withdrawal is a flash-empty book where
+every market order rejects, which is a failure mode, not a feature. The gate exists as a
+last-resort safety net (unit-tested with synthetic toxicity), the same way a circuit
+breaker exists without being expected to trip on an ordinary day. If a future change
+needs genuine tolerance-gated withdrawal, recalibrate first: slower decay, lower
+tolerances, or deeper ladders — and re-baseline bot economics as in
 `docs/calibration.md`.
+
+## Market watch
+
+`MarketRealismTest` (`server/runtime`) replays a full 180-minute session on the
+economics-baseline seed (42), fires a large player sweep into PEAR mid-session, and
+asserts the market behaves: the sweep executes, the toxicity sensor moves, the gate
+never trips, rejects for no liquidity stay under 0.5% of trades, books sit empty at
+most 30% of symbol-ticks, and ≥2 makers quote most of the time on most equities.
+Deterministic: same seed, same report. Re-run after any change to makers, takers, or
+toxicity, and read the printed `MARKET WATCH` lines in the surefire output:
+
+```bash
+cd server && mvn -pl runtime test -Dtest=MarketRealismTest
+```
+
+Current calibration (book-replenishment): toxicity flow weight 500 (was 1000),
+volatility weight 0.25 (was 1.0). The volatility term turned out to carry roughly half
+of baseline toxicity, benching CROWN/ATLAS on most symbols; halving the flow weight
+alone barely moved the means (19-share-equivalent feedback: more depth invites more
+flow). Sweeps still thin the book (509 → 0 resting) while the gate stays holstered.

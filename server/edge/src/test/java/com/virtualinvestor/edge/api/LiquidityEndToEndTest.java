@@ -63,6 +63,8 @@ class LiquidityEndToEndTest {
     private javax.sql.DataSource dataSource;
 
     private final List<String> createdRounds = new ArrayList<>();
+    /** Pre-sweep toxicity on the swept symbol, recorded by sweep() for the spike assertion. */
+    private double sweepBaselineTox;
 
     @AfterEach
     void cleanUp() throws Exception {
@@ -113,10 +115,12 @@ class LiquidityEndToEndTest {
 
         // 2. Sweep the deepest early ladder: the burst's own flow spikes toxicity
         // several times above the calm baseline while makers fade, leaving the side empty.
+        // (Scale-free bars: recalibration moves absolute toxicity, the spike ratio is what matters.)
         String sweepSymbol = sweep(live, roundId);
         double stressTox = live.toxicity(sweepSymbol);
-        assertTrue(stressTox > 0.3,
-                "the sweep should leave toxicity well above baseline, got " + stressTox);
+        assertTrue(stressTox > 2.0 * sweepBaselineTox && stressTox - sweepBaselineTox > 0.05,
+                "the sweep should leave toxicity well above baseline, calm=" + sweepBaselineTox
+                        + " stress=" + stressTox);
 
         // 3. The stressed, thinned book rejects the next take with its reason. Requotes
         // land only on refresh ticks, so probe each empty tick until one rejects.
@@ -262,6 +266,7 @@ class LiquidityEndToEndTest {
                 }
             }
             if (bestDepth >= 300L) {
+                sweepBaselineTox = live.toxicity(deepest);
                 game.submit(roundId, HUMAN, new WireMessage.PlaceOrderCommand("e2e-sweep-1", deepest,
                         OrderSide.BUY.name(), "MARKET", bestDepth, 0.0, 0.0));
                 live.step();

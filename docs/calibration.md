@@ -171,3 +171,34 @@ rival-3 98384.81 (fees 1328) | rival-1 95861.98 (fees 3076)
 - Controlled probe (identical fundamental path): 5-deep ladders emit 1.64x the
   order events of single-level quotes — under the 2x budget via quadratic tier
   cadences plus diffed reposts.
+
+## Book replenishment (book-replenishment)
+
+Configuration: seed `42`, 180-minute session at minute steps (180 ticks),
+session-relative rung cadences, depth-aware takes, toxicity flow weight 500
+(was 1000) and volatility weight 0.25 (was 1.0), tariffs round-robined over the
+seed schedules (0.005/1.00, 0.01/2.00, 0.02/5.00) by roster order, plus a
+player sweep into PEAR at tick 90. Measured from `MarketRealismTest`:
+
+```
+trades=3875 rejectedNoLiquidity=0
+maxToxicity=0.508 on SOLR (gate floor 2.25, trips=0)
+empty-side fraction across all symbols: 0.247
+post-sweep PEAR ladder5: max 270 after the sweep, multi-level on 15 ticks
+standings: MARK 105680.77 (fees 6431) | LEDGER 100707.87 (fees 1662)
+  | ATLAS BANK 100699.45 (fees 647) | VULTURE 100000.00 (fees 0)
+  | MERIDIAN CAPITAL 100000.00 (fees 0) | You 99040.92 (fees 3)
+  | BLITZ 92508.09 (fees 1728) | CROWN FUND 91929.87 (fees 2335)
+  | TIDE 87617.47 (fees 4470)
+```
+
+- Rejects went 1,412 → 0: depth-aware takes size to visible depth instead of
+  firing into emptiness, while the trade count more than doubles (1,530 → 3,875)
+  because takes now fill instead of rejecting.
+- The volatility term carried roughly half of baseline toxicity (measured by
+  zeroing it in a scratch run: means 0.22–0.53 → 0.09–0.31), benching CROWN/ATLAS
+  on most symbols; at 0.25, ≥2 makers quote most of the time on 13 of 20 equities.
+- Costs decide the table: the most active bot (TIDE, fees 4,470) finishes last
+  while quiet LEDGER takes second — leaderboard standing is net of costs.
+- Earlier bot-economics snapshots no longer apply; rerun `MarketRealismTest`
+  for fresh numbers (deterministic on seed 42).
