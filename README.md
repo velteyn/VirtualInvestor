@@ -81,6 +81,22 @@ Open `http://localhost:5173/`.
 4. Late joiners are refused once the clock runs; unstarted rooms expire after
    30 minutes.
 
+## LAN party
+
+LAN players connect freely — no accounts, tunnels, or per-machine setup beyond
+a browser:
+
+- Everyone opens `http://<host-lan-ip>:5173/` (e.g. `http://192.168.1.145:5173/`),
+  registers, and plays. The web terminal proxies API and socket traffic to the
+  game server itself, so **only port 5173** needs to be reachable; the database
+  listens on localhost only.
+- The host approves accounts at `/admin.html` as usual.
+- If a browser shows Vite's `Blocked request` (403), the host's LAN address
+  changed (DHCP): add it to `allowedHosts` in `web/vite.config.ts` and
+  re-run `npm run dev`.
+- The database change above takes effect on the next
+  `docker compose up -d db` (data is kept in the `pgdata` volume).
+
 ## Configuration
 
 | Setting | Where | Default |

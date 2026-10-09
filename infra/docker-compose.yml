@@ -9,7 +9,10 @@ services:
       POSTGRES_USER: vi
       POSTGRES_PASSWORD: vi
     ports:
-      - "5432:5432"
+      # Localhost only: only this host's game server talks to the database.
+      # LAN players reach the game through the web terminal (:5173), never
+      # the database directly — and the trivial dev password stays home.
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
