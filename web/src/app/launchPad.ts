@@ -40,8 +40,6 @@ export function mountLaunchPad(
         <label>Confirm <input id="vi-confirm-pass" type="password" autocomplete="new-password" /></label>
         <button id="vi-do-change">Set password</button>
       </div>
-      <div id="vi-session" hidden>
-      </div>
       <p id="vi-error" class="vi-error" role="alert"></p>
     </div>`;
 
@@ -53,19 +51,16 @@ export function mountLaunchPad(
   const bank = root.querySelector<HTMLSelectElement>('#vi-bank')!;
   const doRegister = root.querySelector<HTMLButtonElement>('#vi-do-register')!;
   const note = root.querySelector<HTMLParagraphElement>('#vi-auth-note')!;
-  const session = root.querySelector<HTMLDivElement>('#vi-session')!;
   const error = root.querySelector<HTMLParagraphElement>('#vi-error')!;
 
   const fail = (cause: unknown): void => {
     error.textContent = cause instanceof Error ? cause.message : 'request failed';
   };
 
-  /** Logged in: swap the auth form for the lobby. */
+  /** Logged in: the login page goes away entirely, the lobby owns the page. */
   const enterLobby = (username: string): void => {
-    note.textContent = `Playing as ${username}.`;
-    session.hidden = false;
-    session.innerHTML = '';
-    mountLobby(session, client, handlers);
+    root.innerHTML = '';
+    mountLobby(root, client, handlers, { username });
   };
 
   const changeBox = root.querySelector<HTMLDivElement>('#vi-change')!;

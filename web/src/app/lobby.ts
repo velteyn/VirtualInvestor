@@ -18,6 +18,11 @@ export interface LobbyHandlers {
   onStarted(round: RoundResponse, participant: string): void;
 }
 
+export interface LobbyOptions {
+  /** Logged-in username, shown in the banner with a log-out action. */
+  username?: string;
+}
+
 function formatLeft(millis: number): string {
   const total = Math.max(0, Math.floor(millis / 1000));
   const minutes = Math.floor(total / 60);
@@ -38,10 +43,20 @@ function asRound(game: GameListing): RoundResponse {
   };
 }
 
-export function mountLobby(root: HTMLElement, client: ServerClient, handlers: LobbyHandlers): void {
+export function mountLobby(
+  root: HTMLElement,
+  client: ServerClient,
+  handlers: LobbyHandlers,
+  options: LobbyOptions = {},
+): void {
+  const username = options.username ?? '';
   root.innerHTML = `
     <div class="vi-lobby">
-      <h2>Lobby</h2>
+      <div class="vi-lobby-head">
+        <h2>Lobby</h2>
+        <span class="vi-sub">Playing as ${username}</span>
+        <button id="vi-logout" title="Log out">Log out</button>
+      </div>
       <div class="vi-lobby-row">
         <button id="vi-refresh">Refresh</button>
         <button id="vi-solo">Single-player session</button>
@@ -61,8 +76,7 @@ export function mountLobby(root: HTMLElement, client: ServerClient, handlers: Lo
       <p id="vi-lobby-error" class="vi-error" role="alert"></p>
     </div>`;
 
-  const body = root.querySelector<HTMLTableSectionElement>('#vi-games-body')!;
-  const dialog = root.querySelector<HTMLDivElement>('#vi-dialog')!;
+  const body = root.querySelector<HTMLTableSectionElement>('#vi-games-body')!;  const dialog = root.querySelector<HTMLDivElement>('#vi-dialog')!;
   const waiting = root.querySelector<HTMLDivElement>('#vi-waiting')!;
   const error = root.querySelector<HTMLParagraphElement>('#vi-lobby-error')!;
   const fail = (cause: unknown): void => {
@@ -200,6 +214,10 @@ export function mountLobby(root: HTMLElement, client: ServerClient, handlers: Lo
 
   root.querySelector<HTMLButtonElement>('#vi-refresh')!.addEventListener('click', () => {
     void refresh();
+  });
+
+  root.querySelector<HTMLButtonElement>('#vi-logout')!.addEventListener('click', () => {
+    window.location.reload();
   });
 
   root.querySelector<HTMLButtonElement>('#vi-solo')!.addEventListener('click', () => {

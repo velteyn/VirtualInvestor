@@ -42,3 +42,11 @@ Project-wide guidance for agents working in this repository.
   as uncommitted work, and do not bundle unrelated changes into one commit.
 - The OpenSpec change `virtualinvestor-foundation` governs the build; update its task checkboxes
   only when behavior is implemented and verified.
+
+## Web UI conventions
+
+- One screen per view: each route-level screen (login, lobby, terminal, admin) owns
+  the page alone — never stack a new screen under the previous one by unhiding
+  sections of a shared page. Transitioning clears the old view (`root.innerHTML = ''`)
+  before mounting the next, the way the terminal already replaces everything.
+- Every authenticated screen shows who is playing and offers log out back to login.
