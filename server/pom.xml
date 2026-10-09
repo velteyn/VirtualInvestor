@@ -10,6 +10,14 @@
   <packaging>pom</packaging>
   <name>VirtualInvestor Server</name>
   <description>Deterministic market simulation and game server for VirtualInvestor</description>
+  <url>https://github.com/velteyn/VirtualInvestor</url>
+  <licenses>
+    <license>
+      <name>GNU General Public License v3.0 or later</name>
+      <url>https://www.gnu.org/licenses/gpl-3.0.html</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
 
   <modules>
     <module>core</module>
