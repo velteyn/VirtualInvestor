@@ -331,6 +331,29 @@ body,
   border-color: #3a4562;
 }
 
+.vi-co-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 2px 2px;
+  font-size: 12px;
+}
+
+.vi-co-bar select {
+  background: #1c2030;
+  color: #c7ccd8;
+  border: 1px solid #2a3046;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font: inherit;
+}
+
+.vi-co-desc {
+  max-width: 76ch;
+  line-height: 1.55;
+  font-size: 13px;
+}
+
 .vi-pf-table td.vi-act button[data-close]:hover,
 .vi-pf-table td.vi-act button[data-cancel]:hover {
   border-color: #ef5350;

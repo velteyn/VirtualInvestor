@@ -13,6 +13,7 @@ import { VirtualInvestorTradeFeed } from '../adapters/tradeFeed';
 import { mountPanels } from './panels';
 import { mountPortfolio } from './portfolio';
 import { mountTicket } from './ticket';
+import { mountCompany, type Company } from './company';
 
 export interface Terminal {
   destroy(): void;
@@ -100,9 +101,14 @@ export function mountTerminal(
 
   // The rivals, watchlist, news and positions panels around the chart.
   // Clicking a watchlist row switches the chart to that symbol (always a
-  // valid name, so the chart can never land on an unknown-symbol error).
+  // valid name, so the chart can never land on an unknown-symbol error) and
+  // follows along in the company tab when it is mounted below.
+  let company: Company | null = null;
   const panels = mountPanels(layout, client, round, tradeFeed, {
-    onSelectSymbol: (symbol: string) => widget.setSymbol(symbol, 'VNDX'),
+    onSelectSymbol: (symbol: string) => {
+      widget.setSymbol(symbol, 'VNDX');
+      company?.show(symbol);
+    },
   });
 
   // Order ticket below news in the right column (order-ticket 1.1).
@@ -115,9 +121,11 @@ export function mountTerminal(
     symbol: order.symbol ?? 'NVDO',
   });
 
-  // Portfolio tab wraps the positions strip (portfolio-tab 3.1).
+  // Portfolio tab wraps the positions strip (portfolio-tab 3.1); the
+  // company tab joins the same dock once it exists (company-profiles 2.2).
   const strip = layout.querySelector<HTMLElement>('.vi-positions');
   const portfolio = strip === null ? null : mountPortfolio(strip, client, round, participant, tradeFeed);
+  company = strip === null || portfolio === null ? null : mountCompany(strip);
 
   // A small session banner (kept out of the way on narrow screens).
   const banner = document.createElement('div');
@@ -130,6 +138,7 @@ export function mountTerminal(
       stopReconnect();
       unsubscribeTrades();
       ticket?.destroy();
+      company?.destroy();
       portfolio?.destroy();
       panels.destroy();
       widget.destroy();
