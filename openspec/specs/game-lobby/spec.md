@@ -10,12 +10,19 @@ rooms, join waiting rooms, and let the master start when ready.
 
 The system SHALL list live games to any logged-in player: single sessions and
 rooms, each with state (waiting/live), preset, time left, seats taken of 6,
-and the current leader.
+and the current leader. Each row SHALL say whether the viewing player may sit:
+own solo seat, a free or held room seat — never another player's solo world,
+never a live room they hold no seat in, never a settled round.
 
 #### Scenario: Lobby shows the world
 
 - **WHEN** an approved player opens the lobby with two live rounds
 - **THEN** both appear with state, preset, remaining time, seats and leader
+
+#### Scenario: Join offered only where the player may sit
+
+- **WHEN** a player views another player's solo session
+- **THEN** the row lists without a Join action, so no dead terminal can open
 
 #### Scenario: Empty lobby offers creation
 

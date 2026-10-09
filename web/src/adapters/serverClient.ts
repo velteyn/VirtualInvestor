@@ -43,6 +43,7 @@ export interface GameListing {
   humans: string[];
   startingCapital: number;
   durationMinutes: number;
+  joinable: boolean;
 }
 
 export interface RoomResponse {
@@ -211,9 +212,9 @@ export class ServerClient {
     return this.loginPlayerId;
   }
 
-  /** Lobby: every live solo session and waiting room. */
+  /** Lobby: every live solo session and waiting room, marked joinable for me. */
   liveGames(): Promise<GameListing[]> {
-    return this.post<GameListing[]>('/api/rounds/live', {});
+    return this.post<GameListing[]>('/api/rounds/live', { sessionToken: this.loginToken });
   }
 
   /** Create a held room; the creator is room master on seat `human`. */

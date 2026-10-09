@@ -84,6 +84,38 @@ class RoomControllerTest {
     }
 
     @Test
+    void joinableMarksOnlySittableRows() throws Exception {
+        String ana = playerToken("ana");
+        String bo = playerToken("bo");
+        // Ana's solo is hers alone.
+        MvcResult solo = mockMvc.perform(post("/api/rounds")
+                        .header("X-API-Version", "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"startingCapital\":100000,\"durationMinutes\":30,\"preset\":\"REALISTIC\","
+                                + "\"sessionToken\":\"" + ana + "\"}"))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String soloId = new tools.jackson.databind.ObjectMapper()
+                .readTree(solo.getResponse().getContentAsString()).get("roundId").asText();
+        createdRounds.add(soloId);
+        String roomId = createRoom(ana);
+
+        // Ana's solo is hers alone; the waiting room takes anyone approved.
+        mockMvc.perform(post("/api/rounds/live")
+                        .header("X-API-Version", "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"sessionToken\":\"" + ana + "\"}"))
+                .andExpect(jsonPath("$[?(@.roundId == '" + soloId + "')].joinable").value(true))
+                .andExpect(jsonPath("$[?(@.roundId == '" + roomId + "')].joinable").value(true));
+        mockMvc.perform(post("/api/rounds/live")
+                        .header("X-API-Version", "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"sessionToken\":\"" + bo + "\"}"))
+                .andExpect(jsonPath("$[?(@.roundId == '" + soloId + "')].joinable").value(false))
+                .andExpect(jsonPath("$[?(@.roundId == '" + roomId + "')].joinable").value(true));
+    }
+
+    @Test
     void lobbyListsSoloAndWaitingRooms() throws Exception {
         String ana = playerToken("ana");
         mockMvc.perform(post("/api/rounds")

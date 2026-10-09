@@ -429,6 +429,15 @@ public class GameService {
 
     /** Lobby listing (game-lobby 2.1): every room and solo session with seats and leader. */
     public List<GameListing> liveGames(long nowMillis) {
+        return liveGames(nowMillis, null);
+    }
+
+    /**
+     * As above, marking each row joinable for the given player (null when anonymous):
+     * own solo seat, a free or held room seat — never another player's solo world,
+     * never a live room they hold no seat in, never a settled round.
+     */
+    public List<GameListing> liveGames(long nowMillis, String viewerId) {
         expireRooms(nowMillis);
         List<GameListing> games = new ArrayList<>();
         for (RoundView view : rounds.values()) {
@@ -437,7 +446,19 @@ public class GameService {
             String state = live.map(round -> round.state().name())
                     .orElse(view.lifecycle().state().name());
             boolean room = rooms.containsKey(roundId);
-            int taken = roundPlayers.getOrDefault(roundId, Map.of()).size();
+            Map<String, String> seats = roundPlayers.getOrDefault(roundId, Map.of());
+            int taken = seats.size();
+            boolean seated = viewerId != null && seats.containsValue(viewerId);
+            boolean joinable;
+            if (room && "WAITING".equals(state)) {
+                joinable = seated || taken < 6;
+            } else if ("RUNNING".equals(state) || "PAUSED".equals(state) || "CLOSING".equals(state)) {
+                joinable = seated;
+            } else if (!room && "CREATED".equals(state)) {
+                joinable = seated;
+            } else {
+                joinable = false;
+            }
             long tick = live.map(com.virtualinvestor.runtime.RunningRound::tick).orElse(0L);
             long stepMillis = live.map(com.virtualinvestor.runtime.RunningRound::stepMillis)
                     .orElse(com.virtualinvestor.runtime.RunningRound.DEFAULT_STEP_MILLIS);
@@ -455,7 +476,7 @@ public class GameService {
                     view.config().preset().name(), Math.max(0L, (total - tick) * stepMillis),
                     taken, room ? 6 : 1, leader,
                     room ? rooms.get(roundId).masterPlayerId() : null, humans,
-                    view.config().startingCapital(), view.config().durationMinutes()));
+                    view.config().startingCapital(), view.config().durationMinutes(), joinable));
         }
         games.sort((a, b) -> a.roundId().compareTo(b.roundId()));
         return games;
@@ -465,7 +486,7 @@ public class GameService {
     public record GameListing(String roundId, String kind, String state, String preset,
             long timeLeftMillis, int seatsTaken, int seatsTotal, String leader,
             String masterPlayerId, List<String> humans, double startingCapital,
-            long durationMinutes) {
+            long durationMinutes, boolean joinable) {
     }
 
     /** The seat a player holds in a round, if the round seated them (multiplayer-seats 2.3). */

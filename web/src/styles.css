@@ -412,6 +412,20 @@ body,
   color: #f0a020;
 }
 
+.vi-watchlist li button {
+  all: unset;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+
+.vi-watchlist li button:hover span:first-child {
+  text-decoration: underline;
+}
+
 .vi-news-meta {
   font-size: 11px;
   opacity: 0.5;

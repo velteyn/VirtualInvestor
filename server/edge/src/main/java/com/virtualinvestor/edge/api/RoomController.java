@@ -96,19 +96,25 @@ public class RoomController {
     }
 
     @PostMapping(path = "/rounds/live", version = "1")
-    public List<GameListingResponse> liveGames() {
-        return game.liveGames(System.currentTimeMillis()).stream()
+    public List<GameListingResponse> liveGames(@RequestBody LiveGamesRequest request) {
+        String playerId = request != null && request.sessionToken() != null
+                ? game.players().playerForToken(request.sessionToken()).orElse(null)
+                : null;
+        return game.liveGames(System.currentTimeMillis(), playerId).stream()
                 .map(game -> new GameListingResponse(game.roundId(), game.kind(), game.state(),
                         game.preset(), game.timeLeftMillis(), game.seatsTaken(), game.seatsTotal(),
                         game.leader(), game.masterPlayerId(), game.humans(),
-                        game.startingCapital(), game.durationMinutes()))
+                        game.startingCapital(), game.durationMinutes(), game.joinable()))
                 .toList();
+    }
+
+    public record LiveGamesRequest(String sessionToken) {
     }
 
     public record GameListingResponse(String roundId, String kind, String state, String preset,
             long timeLeftMillis, int seatsTaken, int seatsTotal, String leader,
             String masterPlayerId, List<String> humans, double startingCapital,
-            long durationMinutes) {
+            long durationMinutes, boolean joinable) {
     }
 
     private String playerForToken(String sessionToken) {

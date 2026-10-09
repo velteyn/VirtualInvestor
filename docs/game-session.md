@@ -71,7 +71,10 @@ capital, and excludes institutions. See `docs/bots.md` for the cast.
 
 After login the lobby (`POST /api/rounds/live`, public) lists every live game —
 solo sessions and rooms — with kind, state, preset, time left, seats taken of 6
-(rooms) or 1 (solo), and the current leader.
+(rooms) or 1 (solo), and the current leader. Each row carries a `joinable` flag
+for the viewing player: own solo seat, a free or held room seat — never another
+player's solo world (joining it would open a terminal with no seat, failing on
+the first resync), never a live room they hold no seat in, never settled.
 
 - **Solo**: `POST /api/rounds` builds a private 1-human world and starts its
   clock at once, exactly as before.

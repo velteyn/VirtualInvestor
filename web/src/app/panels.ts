@@ -12,13 +12,18 @@ export interface Panels {
 }
 
 const WATCH_SYMBOLS = ['NVDO', 'PEAR', 'VOLT', 'TRLL', 'SOCL'];
-const FALLBACK_SYMBOLS: Array<[string, number]> = WATCH_SYMBOLS.map((ticker, i) => [ticker, 100 + i * 40]);
+
+export interface PanelsOptions {
+  /** Switch the chart to a watchlist symbol (always a valid name). */
+  onSelectSymbol?: (symbol: string) => void;
+}
 
 export function mountPanels(
   root: HTMLElement,
   client: ServerClient,
   round: RoundResponse,
   tradeFeed: VirtualInvestorTradeFeed,
+  options: PanelsOptions = {},
 ): Panels {
   const column = document.createElement('aside');
   column.className = 'vi-column';
@@ -40,7 +45,9 @@ export function mountPanels(
   const posRows = strip.querySelector('.vi-pos-rows') as HTMLElement;
   const accountLine = strip.querySelector('.vi-account') as HTMLElement;
 
-  const prices = new Map<string, number>(FALLBACK_SYMBOLS);
+  // Last prints by symbol. No fictional fallbacks: a name with no print yet
+  // shows a dash, never a made-up price.
+  const prices = new Map<string, number>();
   const unsubscribers: Array<() => void> = [];
 
   // ── rivals ─────────────────────────────────────────────────────────────
@@ -56,14 +63,28 @@ export function mountPanels(
   const rivalTimer = window.setInterval(refreshRivals, 3000);
 
   // ── watchlist ──────────────────────────────────────────────────────────
+  // Rows are buttons: clicking one switches the chart to that symbol.
+  let selected = 'NVDO';
   const renderWatchlist = (): void => {
     watchRows.innerHTML = WATCH_SYMBOLS.map((symbol) => {
-      const price = prices.get(symbol) ?? 0;
-      const cls = symbol === 'NVDO' ? 'vi-active' : '';
-      return `<li class="${cls}"><span>${symbol}</span><span>${price.toFixed(2)}</span></li>`;
+      const price = prices.get(symbol);
+      const shown = price === undefined ? '—' : price.toFixed(2);
+      const cls = symbol === selected ? 'vi-active' : '';
+      return `<li class="${cls}"><button data-symbol="${symbol}"><span>${symbol}</span><span>${shown}</span></button></li>`;
     }).join('');
   };
   renderWatchlist();
+  watchRows.addEventListener('click', (event) => {
+    const target = event.target as HTMLElement;
+    const button = target.closest('button[data-symbol]');
+    const symbol = button?.getAttribute('data-symbol');
+    if (symbol === null || symbol === undefined) {
+      return;
+    }
+    selected = symbol;
+    renderWatchlist();
+    options.onSelectSymbol?.(symbol);
+  });
   unsubscribers.push(client.onPayload((payload: WirePayload) => {
     if (payload.type === 'trade') {
       prices.set(String(payload.symbol), Number(payload.price));

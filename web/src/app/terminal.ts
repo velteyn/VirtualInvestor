@@ -99,7 +99,11 @@ export function mountTerminal(
   const unsubscribeTrades = tradeFeed.onChange(syncState);
 
   // The rivals, watchlist, news and positions panels around the chart.
-  const panels = mountPanels(layout, client, round, tradeFeed);
+  // Clicking a watchlist row switches the chart to that symbol (always a
+  // valid name, so the chart can never land on an unknown-symbol error).
+  const panels = mountPanels(layout, client, round, tradeFeed, {
+    onSelectSymbol: (symbol: string) => widget.setSymbol(symbol, 'VNDX'),
+  });
 
   // Order ticket below news in the right column (order-ticket 1.1).
   const column = layout.querySelector<HTMLElement>('.vi-column');

@@ -117,7 +117,6 @@ export function mountLobby(
       body.innerHTML = '';
       for (const game of games) {
         const row = document.createElement('tr');
-        const joinable = game.state === 'WAITING' || game.state === 'RUNNING';
         row.innerHTML = `
           <td>${game.kind === 'room' ? 'Room' : 'Solo'} <span class="vi-dim">${game.roundId}</span></td>
           <td>${game.state}</td>
@@ -126,7 +125,9 @@ export function mountLobby(
           <td>${game.seatsTaken}/${game.seatsTotal}</td>
           <td>${game.leader}</td>
           <td></td>`;
-        if (joinable) {
+        // Join only where the server says this player may sit: own solo seat,
+        // a free or held room seat — never another player's solo world.
+        if (game.joinable) {
           const join = document.createElement('button');
           join.textContent = 'Join';
           join.addEventListener('click', async () => {
