@@ -54,8 +54,8 @@ class InstitutionStrategyTest {
     @Test
     void macroStrategyOnlyActsOnMacroNews() {
         MacroReactionStrategy institution = new MacroReactionStrategy(0.01, 1000L);
-        BotContext macro = context(new NewsSignal(0.05, null, null, NewsScope.MACRO));
-        BotContext company = context(new NewsSignal(0.05, "ACME", "Tech", NewsScope.COMPANY));
+        BotContext macro = context(new NewsSignal(0.05, null, null, NewsScope.MACRO, 1L, Long.MAX_VALUE));
+        BotContext company = context(new NewsSignal(0.05, "ACME", "Tech", NewsScope.COMPANY, 1L, Long.MAX_VALUE));
 
         assertEquals(OrderSide.BUY, institution.decide(macro).get(0).side());
         assertTrue(institution.decide(company).isEmpty());

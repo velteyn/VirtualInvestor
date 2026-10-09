@@ -61,7 +61,7 @@ class NewsSignalDeliveryTest {
     }
 
     private static NewsSignal company(double magnitude) {
-        return new NewsSignal(magnitude, "ACME", "TECH", NewsScope.COMPANY);
+        return new NewsSignal(magnitude, "ACME", "TECH", NewsScope.COMPANY, 10L, 1_000L);
     }
 
     @Test
@@ -85,7 +85,7 @@ class NewsSignalDeliveryTest {
     void institutionWaitsForTheTape() {
         BotRunner runner = macroDesk();
         InstrumentEngine engine = book();
-        NewsSignal macro = new NewsSignal(0.03, "ACME", "TECH", NewsScope.MACRO);
+        NewsSignal macro = new NewsSignal(0.03, "ACME", "TECH", NewsScope.MACRO, 10L, 1_000L);
 
         for (long tick = 10L; tick < 10L + BotRunner.MACRO_NEWS_DELAY_TICKS; tick++) {
             assertTrue(act(runner, engine, tick, tick == 10L ? macro : null).isEmpty(),
@@ -93,6 +93,30 @@ class NewsSignalDeliveryTest {
         }
         List<GameEvent> delayed = act(runner, engine, 10L + BotRunner.MACRO_NEWS_DELAY_TICKS, null);
         assertTrue(printedQty(delayed) > 0, "then it takes size");
+    }
+
+    @Test
+    void consumedSignalsNeverHaunt() {
+        BotRunner runner = hunter();
+        InstrumentEngine engine = book();
+        NewsSignal brief = new NewsSignal(0.03, "ACME", "TECH", NewsScope.COMPANY, 10L, 2L);
+        assertEquals(40L, printedQty(act(runner, engine, 10L, brief)));
+        // One-shot and windowed: later ticks stay silent with or without news.
+        assertTrue(act(runner, engine, 11L, null).isEmpty());
+        assertTrue(act(runner, engine, 20L, null).isEmpty());
+    }
+
+    @Test
+    void slowDeskMissesFastNews() {
+        BotRunner runner = macroDesk();
+        InstrumentEngine engine = book();
+        // Macro release with a 2-tick window: the desk's 4-tick delay outlasts
+        // it, so slow money misses fast news exactly as designed.
+        NewsSignal flash = new NewsSignal(0.03, "ACME", "TECH", NewsScope.MACRO, 10L, 2L);
+        for (long tick = 10L; tick < 24L; tick++) {
+            assertTrue(act(runner, engine, tick, tick == 10L ? flash : null).isEmpty(),
+                    "expired before the delay elapsed: no take at tick " + tick);
+        }
     }
 
     @Test
@@ -106,8 +130,8 @@ class NewsSignalDeliveryTest {
     @Test
     void jitterIsDeterministicBoundedAndReaderSpecific() {
         NewsSignal stated = company(0.02);
-        NewsSignal first = BotRunner.jitter(stated, 42L, "rival-5", 10L);
-        NewsSignal repeat = BotRunner.jitter(stated, 42L, "rival-5", 10L);
+        NewsSignal first = BotRunner.jitter(stated, 42L, "rival-5");
+        NewsSignal repeat = BotRunner.jitter(stated, 42L, "rival-5");
         assertEquals(first.signedMagnitude(), repeat.signedMagnitude(), 1e-12,
                 "same seed, headline and reader read identically");
 
@@ -117,7 +141,7 @@ class NewsSignalDeliveryTest {
         assertEquals(NewsScope.COMPANY, first.scope());
 
         long distinct = java.util.stream.IntStream.range(0, 20)
-                .mapToObj(i -> BotRunner.jitter(stated, 42L, "bot-" + i, 10L).signedMagnitude())
+                .mapToObj(i -> BotRunner.jitter(stated, 42L, "bot-" + i).signedMagnitude())
                 .distinct()
                 .count();
         assertTrue(distinct > 1, "different readers read differently");

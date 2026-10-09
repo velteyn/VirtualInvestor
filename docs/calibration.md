@@ -231,3 +231,30 @@ standings: MARK 106017.61 (fees 6465) | LEDGER 102637.02 (fees 1673)
   without reordering it, so no watch bound moved.
 - Delay/noise calibration (4 ticks, ±25%) is initial: confirmed harmless by
   the numbers above, to be revisited if news-day toxicity ever nears the gate.
+
+## News validity (news-validity)
+
+Configuration: as above, plus reaction-validity windows from scope × magnitude
+(company ×5, sector ×8, macro ×15 as session fractions, floored at 5 ticks).
+Measured from `MarketRealismTest`:
+
+```
+trades=3909 rejectedNoLiquidity=0
+maxToxicity=0.528 on SOLR (gate floor 2.25, trips=0)
+empty-side fraction across all symbols: 0.252
+standings: MARK 104791.74 (fees 6463) | LEDGER 102173.19 (fees 1674)
+  | ATLAS BANK 101486.60 (fees 655) | MERIDIAN CAPITAL 100000.00 (fees 0)
+  | VULTURE 99962.58 (fees 80) | You 99107.60 (fees 3)
+  | BLITZ 92026.29 (fees 1742) | CROWN FUND 91927.14 (fees 2340)
+  | TIDE 87810.29 (fees 4510)
+```
+
+- Expiry costs almost nothing on this seed (trades 3897 → 3909, empty fraction
+  0.257 → 0.252): most earnings outlive the bots' delays, so behavior is
+  preserved while the mechanism stands ready for short-window shocks.
+- VULTURE runs lifetime-negative on headlines again (100035 → 99962): chasing
+  rumors loses, as designed — denials bag-hold the fast money.
+- MERIDIAN stays flat with no macro headlines on the seed (correct); on a
+  macro-bearing session it takes size. No watch bound moved.
+- Earlier snapshots no longer apply; rerun `MarketRealismTest` for fresh
+  numbers (deterministic on seed 42).

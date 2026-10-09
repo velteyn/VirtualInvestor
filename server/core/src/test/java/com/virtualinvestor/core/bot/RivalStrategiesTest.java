@@ -45,8 +45,8 @@ class RivalStrategiesTest {
     @Test
     void newsHunterPouncesOnHeadlines() {
         NewsHunterStrategy hunter = new NewsHunterStrategy(0.01, 10L);
-        NewsSignal bullish = new NewsSignal(0.05, "ACME", "Tech", NewsScope.COMPANY);
-        NewsSignal bearish = new NewsSignal(-0.05, "ACME", "Tech", NewsScope.COMPANY);
+        NewsSignal bullish = new NewsSignal(0.05, "ACME", "Tech", NewsScope.COMPANY, 1L, Long.MAX_VALUE);
+        NewsSignal bearish = new NewsSignal(-0.05, "ACME", "Tech", NewsScope.COMPANY, 1L, Long.MAX_VALUE);
 
         assertEquals(OrderSide.BUY, onlySide(hunter.decide(context(100.0, 100.0, 0.0, bullish))));
         assertEquals(OrderSide.SELL, onlySide(hunter.decide(context(100.0, 100.0, 0.0, bearish))));

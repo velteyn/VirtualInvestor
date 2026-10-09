@@ -93,16 +93,46 @@ export function mountPanels(
   }));
 
   // ── news ───────────────────────────────────────────────────────────────
-  const news: string[] = [];
+  // Headlines carry release tick + validity; the newest round tick (seen on
+  // trade frames) flips expired items to "priced in" (news-validity 3.1).
+  // Expired news stays readable — bots ignore it, humans still learn from it.
+  interface NewsRow {
+    badge: string;
+    headline: string;
+    releaseTick: number;
+    validityTicks: number;
+  }
+  const news: NewsRow[] = [];
+  let newestTick = 0;
+  const renderNews = (): void => {
+    newsRows.innerHTML = news.map((row) => {
+      const pricedIn = row.validityTicks > 0 && newestTick > row.releaseTick + row.validityTicks;
+      const badge = pricedIn ? `${row.badge} · priced in` : row.badge;
+      return `<li><div class="vi-news-meta">${escape(badge)}</div><div>${escape(row.headline)}</div></li>`;
+    }).join('');
+  };
   unsubscribers.push(client.onPayload((payload: WirePayload) => {
+    if (payload.type === 'trade') {
+      const tick = Number(payload.tick);
+      if (Number.isFinite(tick) && tick > newestTick) {
+        newestTick = tick;
+        renderNews();
+      }
+      return;
+    }
     if (payload.type !== 'news') {
       return;
     }
-    const badge = `${String(payload.source)} · ${String(payload.scope)}`;
-    news.unshift(
-      `<li><div class="vi-news-meta">${escape(badge)}</div><div>${escape(String(payload.headline))}</div></li>`);
+    const releaseTick = Number(payload.tick);
+    const validityTicks = Number(payload.durationTicks);
+    news.unshift({
+      badge: `${String(payload.source)} · ${String(payload.scope)}`,
+      headline: String(payload.headline),
+      releaseTick: Number.isFinite(releaseTick) ? releaseTick : 0,
+      validityTicks: Number.isFinite(validityTicks) ? validityTicks : 0,
+    });
     news.length = Math.min(news.length, 20);
-    newsRows.innerHTML = news.join('');
+    renderNews();
   }));
 
   // ── positions + account ────────────────────────────────────────────────

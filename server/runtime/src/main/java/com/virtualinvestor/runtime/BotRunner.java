@@ -126,8 +126,8 @@ final class BotRunner {
         return strategy instanceof MacroReactionStrategy ? MACRO_NEWS_DELAY_TICKS : 0;
     }
 
-    /** One held headline. */
-    private record PendingNews(NewsSignal signal, long arrivalTick) {
+    /** One held headline; it arrived on its release tick (folded same-tick). */
+    private record PendingNews(NewsSignal signal) {
     }
 
     boolean stopped() {
@@ -251,29 +251,32 @@ final class BotRunner {
      * jittered by a hash of seed, headline, and reader — deterministic across
      * replays, different per bot, so borderline headlines split the crowd.
      */
-    static NewsSignal jitter(NewsSignal signal, long seed, String participantId, long arrivalTick) {
+    static NewsSignal jitter(NewsSignal signal, long seed, String participantId) {
         long hash = Objects.hash(seed, signal.symbol(), signal.sector(), signal.scope(),
-                Double.hashCode(signal.signedMagnitude()), arrivalTick, participantId);
+                Double.hashCode(signal.signedMagnitude()), signal.releaseTick(), participantId);
         double epsilon = (new java.util.Random(hash).nextDouble() * 2.0 - 1.0) * NEWS_NOISE_FRACTION;
         return new NewsSignal(signal.signedMagnitude() * (1.0 + epsilon),
-                signal.symbol(), signal.sector(), signal.scope());
+                signal.symbol(), signal.sector(), signal.scope(),
+                signal.releaseTick(), signal.validityTicks());
     }
 
-    private NewsSignal jitter(NewsSignal signal, long arrivalTick) {
-        return jitter(signal, seed, participant.id(), arrivalTick);
+    private NewsSignal jitter(NewsSignal signal) {
+        return jitter(signal, seed, participant.id());
     }
 
     private List<GameEvent> take(
             InstrumentEngine engine, double fundamental, double volatility, double priceChange,
             long netPosition, long tick, double equity, NewsSignal wire, Consumer<Fill> onFill) {
         if (wire != null) {
-            newsMailbox.put(engine.symbol(), new PendingNews(wire, tick));
+            newsMailbox.put(engine.symbol(), new PendingNews(wire));
         }
         NewsSignal visible = null;
         PendingNews pending = newsMailbox.get(engine.symbol());
-        if (pending != null && tick >= pending.arrivalTick() + newsDelayFor(strategy)) {
+        if (pending != null
+                && tick >= pending.signal().releaseTick() + newsDelayFor(strategy)
+                && tick <= pending.signal().releaseTick() + pending.signal().validityTicks()) {
             newsMailbox.remove(engine.symbol());
-            visible = jitter(pending.signal(), pending.arrivalTick());
+            visible = jitter(pending.signal());
         }
         BotContext context = new BotContext(
                 engine.symbol(), engine.lastPrice(), fundamental, priceChange, volatility, netPosition,

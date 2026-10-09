@@ -335,7 +335,7 @@ public final class RunningRound {
                 continue;
             }
             NewsSignal signal = new NewsSignal(release.magnitude(), release.symbol(),
-                    release.sector(), release.scope());
+                    release.sector(), release.scope(), release.tick(), release.durationTicks());
             switch (release.scope()) {
                 case COMPANY -> {
                     if (release.symbol() != null) {

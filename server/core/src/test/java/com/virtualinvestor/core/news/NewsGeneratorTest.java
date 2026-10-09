@@ -36,6 +36,16 @@ class NewsGeneratorTest {
     }
 
     @Test
+    void validityScalesWithScopeAndMagnitude() {
+        // 180-tick session: a 2% earnings burns out in ~18 ticks, a 3% macro
+        // shock stays tradeable ~81, tiny noise floors at barely reactable.
+        assertEquals(18L, NewsGenerator.validityTicks(180L, NewsScope.COMPANY, 0.02));
+        assertEquals(81L, NewsGenerator.validityTicks(180L, NewsScope.MACRO, 0.03));
+        assertEquals(5L, NewsGenerator.validityTicks(180L, NewsScope.COMPANY, 0.001));
+        assertEquals(180L, NewsGenerator.validityTicks(180L, NewsScope.MACRO, 1.0));
+    }
+
+    @Test
     void eventsAreSortedByTick() {
         List<NewsItem> items = generate(5L, 18_000L);
         for (int i = 1; i < items.size(); i++) {

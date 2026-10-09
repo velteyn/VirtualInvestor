@@ -23,6 +23,22 @@ public final class NewsGenerator {
     private final long ticksPerRandomEvent;
     private final double earningsFraction;
 
+    /**
+     * Reaction-validity window in ticks (news-validity 2.1): how long a headline
+     * stays tradeable scales with what the news is — magnitude times a scope
+     * weight, as a fraction of the session. Earnings burn out in days; big macro
+     * shocks stay tradeable nearly all game. Floored so every headline is at
+     * least barely reactable, capped at the session itself.
+     */
+    static long validityTicks(long sessionTicks, NewsScope scope, double magnitude) {
+        double weight = switch (scope) {
+            case COMPANY -> 5.0;
+            case SECTOR -> 8.0;
+            default -> 15.0;
+        };
+        return Math.max(5L, Math.min(sessionTicks, Math.round(sessionTicks * magnitude * weight)));
+    }
+
     public NewsGenerator(
             InstrumentUniverse universe, RandomStreams streams, long ticksPerRandomEvent, double earningsFraction) {
         this.universe = Objects.requireNonNull(universe, "universe");
@@ -62,7 +78,7 @@ public final class NewsGenerator {
                     "Scheduled earnings release for " + instrument.name(),
                     direction,
                     magnitude,
-                    sessionTicks / 4L,
+                    validityTicks(sessionTicks, NewsScope.COMPANY, magnitude),
                     NewsStage.CONFIRMED,
                     tick));
         }
@@ -101,7 +117,7 @@ public final class NewsGenerator {
                     "Wire report",
                     direction,
                     magnitude,
-                    600L + random.nextInt(4) * 300L,
+                    validityTicks(sessionTicks, scope, magnitude),
                     NewsStage.RUMOR,
                     tick));
         }
