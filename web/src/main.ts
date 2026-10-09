@@ -4,6 +4,8 @@
  * over the server's data, order and news feeds.
  */
 import './styles.css';
+import '@fontsource/cinzel/700.css';
+import '@fontsource/cinzel/800.css';
 import { ServerClient } from './adapters/serverClient';
 import { mountLaunchPad } from './app/launchPad';
 import { mountTerminal } from './app/terminal';

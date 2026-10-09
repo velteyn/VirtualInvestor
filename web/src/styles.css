@@ -27,6 +27,28 @@ body,
   font-size: 26px;
 }
 
+/* ── brand masthead: Wall-Street engraved serif in gold ───────────────── */
+.vi-brand {
+  font-family: 'Cinzel', 'Playfair Display', Georgia, 'Times New Roman', serif;
+  font-weight: 800;
+  font-size: 34px;
+  line-height: 1.15;
+  letter-spacing: 0.04em;
+  color: #e8b923;
+  background: linear-gradient(180deg, #f8dc7a 0%, #e8b923 55%, #9c7414 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-align: center;
+}
+
+.vi-brand .vi-tm {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  vertical-align: baseline;
+  -webkit-text-fill-color: #c7ccd8;
+}
+
 .vi-sub {
   margin: 0 0 24px;
   opacity: 0.7;

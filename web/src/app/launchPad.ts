@@ -17,7 +17,7 @@ export function mountLaunchPad(
 ): void {
   root.innerHTML = `
     <div class="vi-launch">
-      <h1>VirtualInvestor</h1>
+      <h1 class="vi-brand">Virtual Inve$tor<span class="vi-tm">tm</span></h1>
       <p class="vi-sub">Log in to trade the market against five rivals.</p>
       <div class="vi-auth">
         <label>Player <input id="vi-user" autocomplete="username" /></label>
