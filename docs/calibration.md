@@ -202,3 +202,32 @@ standings: MARK 105680.77 (fees 6431) | LEDGER 100707.87 (fees 1662)
   while quiet LEDGER takes second — leaderboard standing is net of costs.
 - Earlier bot-economics snapshots no longer apply; rerun `MarketRealismTest`
   for fresh numbers (deterministic on seed 42).
+
+## News-reading bots (news-reading-bots)
+
+Configuration: as above, plus per-symbol headline signals with per-archetype
+delays (VULTURE 0 ticks, MERIDIAN 4) and ±25% seeded magnitude noise. Measured
+from `MarketRealismTest`:
+
+```
+trades=3897 rejectedNoLiquidity=0
+maxToxicity=0.528 on SOLR (gate floor 2.25, trips=0)
+empty-side fraction across all symbols: 0.257
+standings: MARK 106017.61 (fees 6465) | LEDGER 102637.02 (fees 1673)
+  | ATLAS BANK 101866.49 (fees 645) | VULTURE 100035.11 (fees 70)
+  | MERIDIAN CAPITAL 100000.00 (fees 0) | You 99107.60 (fees 3)
+  | BLITZ 92746.15 (fees 1728) | CROWN FUND 91911.84 (fees 2335)
+  | TIDE 87637.18 (fees 4480)
+```
+
+- VULTURE trades for the first time in any baseline (fees 70 on company
+  earnings) — the headline hunter is no longer decorative.
+- MERIDIAN stays flat here, correctly: the 180-tick seed carries no macro
+  headlines (randoms need longer sessions). On a 30-minute session with 3 macro
+  releases it took macro size three times (lifetime realized −43 — slow
+  committees chase, and sometimes lose).
+- Everything else barely moved (trades 3875 → 3897, empty fraction 0.247 →
+  0.257, max toxicity 0.508 → 0.528): waking two bots perturbs the market
+  without reordering it, so no watch bound moved.
+- Delay/noise calibration (4 ticks, ±25%) is initial: confirmed harmless by
+  the numbers above, to be revisited if news-day toxicity ever nears the gate.

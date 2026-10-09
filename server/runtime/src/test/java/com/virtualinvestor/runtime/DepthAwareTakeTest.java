@@ -30,7 +30,7 @@ class DepthAwareTakeTest {
     }
 
     private static List<GameEvent> act(BotRunner runner, InstrumentEngine engine) {
-        return runner.act(engine, 100.0, 0.0, 0.0, 0L, 1L, 1_000_000.0, 0.0, fill -> {
+        return runner.act(engine, 100.0, 0.0, 0.0, 0L, 1L, 1_000_000.0, 0.0, null, fill -> {
         });
     }
 

@@ -62,6 +62,26 @@ a wider spread as the volatility input rises.
 - `NewsConfirmed`
 - `NewsDenied`
 
+## Who reads headlines
+
+Releases are folded into per-symbol signals each tick and handed to strategy
+contexts (`BotContext.news`, null on quiet ticks):
+
+- **VULTURE** (`NewsHunterStrategy`, 40 shares) pounces on any signal above 0.01
+  the same tick it is released — the fastest gun in the room.
+- **MERIDIAN** (`MacroReactionStrategy`, 1,000 shares) reads `MACRO` signals only,
+  after a 4-tick delay: size arrives once the tape confirms.
+- Company releases reach their symbol, sector releases their members, macro (and
+  structural) releases the index only — one headline can never fire every engine.
+- Every bot reads a slightly different magnitude (±25%, seeded per headline and
+  reader, replay-identical), so borderline headlines split the crowd instead of
+  moving it in lockstep.
+
+Rumor versus resolution: bots trade the headline (the rumor piece). The
+resolution plays out through fundamentals and volatility only — hunters who
+bought a denied rumor eat the loss, and both desks run lifetime-negative on
+news flow in the baselines.
+
 ## Not yet implemented
 
 - Human-facing delivery cadence and fairness (spec: fair human cadence) — arrives with the

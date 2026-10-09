@@ -2,7 +2,9 @@ package com.virtualinvestor.runtime;
 
 import com.virtualinvestor.core.bot.BotContext;
 import com.virtualinvestor.core.bot.BotStrategy;
+import com.virtualinvestor.core.bot.MacroReactionStrategy;
 import com.virtualinvestor.core.bot.MarketMakerStrategy;
+import com.virtualinvestor.core.bot.NewsSignal;
 import com.virtualinvestor.core.bot.OrderIntent;
 import com.virtualinvestor.core.bot.Quote;
 import com.virtualinvestor.core.book.IncomingOrder;
@@ -13,8 +15,10 @@ import com.virtualinvestor.core.event.GameEvent;
 import com.virtualinvestor.core.book.Fill;
 import com.virtualinvestor.core.participant.Participant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Consumer;
 
 /**
@@ -39,6 +43,16 @@ final class BotRunner {
     private final double tickSize;
     private final long baseSize;
     private final long phaseTicks;
+    private final long seed;
+    /**
+     * Perception heterogeneity (news-reading-bots 1.4): institutions react slower
+     * than retail hunters, so size arrives after the tape confirms.
+     */
+    static final int MACRO_NEWS_DELAY_TICKS = 4;
+    /** Same-tick headlines read slightly differently per bot (news-reading-bots 1.4). */
+    private static final double NEWS_NOISE_FRACTION = 0.25;
+    /** Held headlines per symbol: visible at arrival + delay, consumed one-shot. */
+    private final Map<String, PendingNews> newsMailbox = new LinkedHashMap<>();
     /**
      * Session length in ticks, for session-relative replenishment (book-replenishment 1.1):
      * outer rungs requote at least a few times per session instead of on fixed slow
@@ -91,6 +105,11 @@ final class BotRunner {
 
     BotRunner(Participant participant, BotStrategy strategy, MarketMakerStrategy maker, long quoteRefreshTicks,
               double tickSize, long phaseTicks, long sessionTicks) {
+        this(participant, strategy, maker, quoteRefreshTicks, tickSize, phaseTicks, sessionTicks, 0L);
+    }
+
+    BotRunner(Participant participant, BotStrategy strategy, MarketMakerStrategy maker, long quoteRefreshTicks,
+              double tickSize, long phaseTicks, long sessionTicks, long seed) {
         this.participant = participant;
         this.strategy = strategy;
         this.maker = maker;
@@ -98,7 +117,17 @@ final class BotRunner {
         this.tickSize = tickSize;
         this.phaseTicks = phaseTicks;
         this.sessionTicks = sessionTicks;
+        this.seed = seed;
         this.baseSize = strategy != null ? 100L : QUOTE_SIZE;
+    }
+
+    /** Reaction delay in ticks: institutions move size after the tape confirms. */
+    static int newsDelayFor(BotStrategy strategy) {
+        return strategy instanceof MacroReactionStrategy ? MACRO_NEWS_DELAY_TICKS : 0;
+    }
+
+    /** One held headline. */
+    private record PendingNews(NewsSignal signal, long arrivalTick) {
     }
 
     boolean stopped() {
@@ -115,7 +144,8 @@ final class BotRunner {
 
     List<GameEvent> act(
             InstrumentEngine engine, double fundamental, double volatility, double priceChange,
-            long netPosition, long tick, double equity, double toxicity, Consumer<Fill> onFill) {
+            long netPosition, long tick, double equity, double toxicity, NewsSignal news,
+            Consumer<Fill> onFill) {
         if (stopped) {
             return List.of();
         }
@@ -126,7 +156,7 @@ final class BotRunner {
             }
             return refreshQuote(engine, quote, fundamental, netPosition, tick, equity, onFill);
         }
-        return take(engine, fundamental, volatility, priceChange, netPosition, tick, equity, onFill);
+        return take(engine, fundamental, volatility, priceChange, netPosition, tick, equity, news, onFill);
     }
 
     /** Whether any ladder rung's session-relative wave lands on this tick. */
@@ -216,12 +246,38 @@ final class BotRunner {
     private record DesiredLevel(OrderSide side, double price, long size) {
     }
 
+    /**
+     * Per-bot read of a headline (news-reading-bots 1.4): the stated magnitude
+     * jittered by a hash of seed, headline, and reader — deterministic across
+     * replays, different per bot, so borderline headlines split the crowd.
+     */
+    static NewsSignal jitter(NewsSignal signal, long seed, String participantId, long arrivalTick) {
+        long hash = Objects.hash(seed, signal.symbol(), signal.sector(), signal.scope(),
+                Double.hashCode(signal.signedMagnitude()), arrivalTick, participantId);
+        double epsilon = (new java.util.Random(hash).nextDouble() * 2.0 - 1.0) * NEWS_NOISE_FRACTION;
+        return new NewsSignal(signal.signedMagnitude() * (1.0 + epsilon),
+                signal.symbol(), signal.sector(), signal.scope());
+    }
+
+    private NewsSignal jitter(NewsSignal signal, long arrivalTick) {
+        return jitter(signal, seed, participant.id(), arrivalTick);
+    }
+
     private List<GameEvent> take(
             InstrumentEngine engine, double fundamental, double volatility, double priceChange,
-            long netPosition, long tick, double equity, Consumer<Fill> onFill) {
+            long netPosition, long tick, double equity, NewsSignal wire, Consumer<Fill> onFill) {
+        if (wire != null) {
+            newsMailbox.put(engine.symbol(), new PendingNews(wire, tick));
+        }
+        NewsSignal visible = null;
+        PendingNews pending = newsMailbox.get(engine.symbol());
+        if (pending != null && tick >= pending.arrivalTick() + newsDelayFor(strategy)) {
+            newsMailbox.remove(engine.symbol());
+            visible = jitter(pending.signal(), pending.arrivalTick());
+        }
         BotContext context = new BotContext(
                 engine.symbol(), engine.lastPrice(), fundamental, priceChange, volatility, netPosition,
-                participant.account().cash(), null, tick);
+                participant.account().cash(), visible, tick);
         List<OrderIntent> intents = strategy.decide(context);
         if (intents.isEmpty()) {
             return List.of();

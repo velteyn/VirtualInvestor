@@ -25,7 +25,7 @@ class QuoteRefreshTest {
     }
 
     private static List<GameEvent> act(BotRunner runner, InstrumentEngine engine, long tick) {
-        return runner.act(engine, 100.0, 0.0, 0.0, 0L, tick, 100_000.0, 0.0, fill -> {
+        return runner.act(engine, 100.0, 0.0, 0.0, 0L, tick, 100_000.0, 0.0, null, fill -> {
         });
     }
 
@@ -51,7 +51,7 @@ class QuoteRefreshTest {
         InstrumentEngine engine = new InstrumentEngine("ACME", 100.0);
         act(runner, engine, 0L);
 
-        List<GameEvent> moved = runner.act(engine, 105.0, 0.0, 0.0, 0L, 10L, 100_000.0, 0.0, fill -> {
+        List<GameEvent> moved = runner.act(engine, 105.0, 0.0, 0.0, 0L, 10L, 100_000.0, 0.0, null, fill -> {
         });
 
         assertTrue(moved.size() > 0, "a moved fundamental reposts the touch");

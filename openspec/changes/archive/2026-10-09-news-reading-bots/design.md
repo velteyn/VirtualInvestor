@@ -13,9 +13,9 @@ See proposal.md (Why). Current mechanics, all verified in code:
 
 **Goals:**
 
-- Headline strategies fire on the release tick through the existing, tested strategy code.
+- Headline strategies fire through the existing, tested strategy code, starting on the release tick.
 - One headline can never stampede every engine: bounded, reviewable order flow per release.
-- No new informational asymmetry for humans beyond today's (bots already trade the fundamental move the same tick).
+- Identical headlines produce staggered, disagreeing bot reads — a cascade, not a synchronized thump — while the human (instant socket headline) stays the fastest gun in the room.
 
 **Non-Goals:**
 
@@ -37,9 +37,9 @@ Runners act per engine, so naive delivery fires VULTURE on all 21 symbols per ma
 
 What a reader — human or bot — reacts to is the headline. Confirmations and denials already move prices through the fundamental fold; sending a second signal would double-count resolutions and hand bots a risk-free rumor fade. Hunters buying denied rumors eat the loss like everyone else.
 
-**4. Same-tick delivery is fair (over delaying bots a tick for humans).**
+**4. Stagger perception per archetype: mailbox latency plus magnitude noise (over identical same-tick delivery).**
 
-Bots already trade the fundamental repricing on the release tick through value/momentum paths, and makers widen the same tick — the informational playing field does not move. A delay would invent an advantage humans never had while complicating the deterministic fold.
+Every bot reading an identical signal on the identical tick produces a synchronized thump — the webcurvesim failure mode (uniform agents, uniform action). Instead the runner holds each signal in a per-participant mailbox visible at release tick + delay (VULTURE 0, MERIDIAN a few ticks; exact values calibrated in implementation), and jitters the magnitude per bot per headline (±25%, seeded on news id + participant, so replays agree). Near-threshold headlines then split the crowd — one bot passes where another fires — which is what "different personalities trade the same headline differently" actually means. Makers and threshold bots keep their emergent lags untouched. Side benefit: delayed bots make the human socket headline the fastest signal in the room, turning the fair-cadence requirement from constraint into property.
 
 ## Risks / Trade-offs
 
@@ -47,7 +47,8 @@ Bots already trade the fundamental repricing on the release tick through value/m
 - [News-day toxicity spikes → makers fade harder on headlines] → Mitigation: intended and spec-aligned (fade exists for toxic flow); gate-trips assertion guards the backstop.
 - [Sector news fans out to several engines (~7 × 40 shares)] → Mitigation: bounded and visible in the watch's trade counts; no cap needed unless measured otherwise.
 - [A release and its resolution in nearby ticks double-moves prices] → Mitigation: pre-existing dynamics (fundamental fold unchanged); watch max-toxicity bounds the combined effect.
+- [Two new knobs (delays, noise level) to miscalibrate] → Mitigation: both bounded by unit tests (mailbox visibility ticks, jitter determinism); exact values confirmed against the watch's cascade shape, not asserted blind.
 
 ## Migration Plan
 
-Wiring only — no data migration, no config format change. Rollback is a revert to the `null` signal. Ship order: signal fold + routing with unit tests → watch run and bound recalibration → economics docs. Each step keeps the suite green on its own.
+Wiring only — no data migration, no config format change. Rollback is a revert to the `null` signal. Ship order: signal fold + routing with unit tests → mailbox latency + noise with unit tests → watch run and bound recalibration → economics docs. Each step keeps the suite green on its own.

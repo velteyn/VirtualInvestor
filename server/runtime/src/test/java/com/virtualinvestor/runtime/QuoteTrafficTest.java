@@ -30,7 +30,7 @@ class QuoteTrafficTest {
         for (long tick = 0L; tick < 300L; tick++) {
             fundamental += rng.nextGaussian() * 0.05;
             List<GameEvent> events = runner.act(engine, fundamental, 0.0, 0.0, 0L, tick, 100_000.0, 0.0,
-                    fill -> {
+                    null, fill -> {
                     });
             total += events.size();
         }

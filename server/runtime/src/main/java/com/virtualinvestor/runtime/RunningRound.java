@@ -5,6 +5,7 @@ import com.virtualinvestor.core.auction.AuctionFill;
 import com.virtualinvestor.core.auction.AuctionOrder;
 import com.virtualinvestor.core.auction.AuctionResult;
 import com.virtualinvestor.core.book.IncomingOrder;
+import com.virtualinvestor.core.bot.NewsSignal;
 import com.virtualinvestor.core.clock.TimeSource;
 import com.virtualinvestor.core.clock.WorldClock;
 import com.virtualinvestor.core.command.Command;
@@ -106,6 +107,10 @@ public final class RunningRound {
     private final List<Participant> participants = new ArrayList<>();
     private List<BotRunner> runners;
     private final long sessionTicks;
+    /** Ticker → sector, for routing sector news to its symbols. */
+    private final Map<String, String> sectorByTicker = new LinkedHashMap<>();
+    /** Index ticker: the only engine macro headlines reach. */
+    private String indexTicker = "VNDX";
     private final Map<String, Double> previousPrices;
     private final Map<String, Double> startingCapitals;
     private final Map<String, MarketRules> marketRules = new LinkedHashMap<>();
@@ -197,6 +202,12 @@ public final class RunningRound {
 
         long durationTicks = config.durationTicks(stepMillis);
         this.universe = InstrumentUniverse.defaultUniverse();
+        for (Instrument instrument : universe.all()) {
+            sectorByTicker.put(instrument.ticker(), instrument.sector());
+            if (instrument.isIndex()) {
+                indexTicker = instrument.ticker();
+            }
+        }
         this.clock = new WorldClock(stepMillis, TimeSource.system());
         RandomStreams streams = new RandomStreams(seed);
         this.fundamentals = new FundamentalModel(
@@ -310,6 +321,38 @@ public final class RunningRound {
         rebuildRoster();
     }
 
+    /**
+     * Route one tick's releases to per-symbol headline signals (news-reading-bots 1.1):
+     * company news reaches its symbol, sector news its symbols, macro (and structural)
+     * news the index only — so one headline can never fire every engine at once.
+     * Pure fold of the release events, so replays agree.
+     */
+    static Map<String, NewsSignal> routeReleases(List<GameEvent> newsEvents,
+            Map<String, String> sectorBySymbol, String indexTicker) {
+        Map<String, NewsSignal> signals = new LinkedHashMap<>();
+        for (GameEvent event : newsEvents) {
+            if (!(event instanceof GameEvent.NewsReleased release)) {
+                continue;
+            }
+            NewsSignal signal = new NewsSignal(release.magnitude(), release.symbol(),
+                    release.sector(), release.scope());
+            switch (release.scope()) {
+                case COMPANY -> {
+                    if (release.symbol() != null) {
+                        signals.put(release.symbol(), signal);
+                    }
+                }
+                case SECTOR -> sectorBySymbol.forEach((ticker, sector) -> {
+                    if (sector != null && sector.equals(release.sector())) {
+                        signals.put(ticker, signal);
+                    }
+                });
+                default -> signals.put(indexTicker, signal);
+            }
+        }
+        return signals;
+    }
+
     /** One maker's toxicity response: sensitivity rises and tolerance falls by roster index. */
     private static com.virtualinvestor.core.bot.MarketMakerStrategy makerFor(int index) {
         return new com.virtualinvestor.core.bot.MarketMakerStrategy(0.02, 2.0, 0.001, 500L, 5, 2.0,
@@ -325,25 +368,30 @@ public final class RunningRound {
             BotParticipant rival = rivals.get(i);
             built.add(switch (rival.displayName()) {
                 case "MARK" -> new BotRunner(rival, null, makerFor(i), QUOTE_REFRESH_TICKS, tickFor("NVDO"), i,
-                        sessionTicks);
+                        sessionTicks, seed);
                 case "TIDE" -> new BotRunner(rival,
-                        new com.virtualinvestor.core.bot.MomentumStrategy(0.0005, 30L), null, 0L);
+                        new com.virtualinvestor.core.bot.MomentumStrategy(0.0005, 30L), null, 0L,
+                        0.01, 0L, sessionTicks, seed);
                 case "LEDGER" -> new BotRunner(rival,
-                        new com.virtualinvestor.core.bot.ValueStrategy(0.005, 30L), null, 0L);
+                        new com.virtualinvestor.core.bot.ValueStrategy(0.005, 30L), null, 0L,
+                        0.01, 0L, sessionTicks, seed);
                 case "BLITZ" -> new BotRunner(rival,
-                        new com.virtualinvestor.core.bot.ScalperStrategy(0.0005, 20L), null, 0L);
+                        new com.virtualinvestor.core.bot.ScalperStrategy(0.0005, 20L), null, 0L,
+                        0.01, 0L, sessionTicks, seed);
                 case "VULTURE" -> new BotRunner(rival,
-                        new com.virtualinvestor.core.bot.NewsHunterStrategy(0.01, 40L), null, 0L);
+                        new com.virtualinvestor.core.bot.NewsHunterStrategy(0.01, 40L), null, 0L,
+                        0.01, 0L, sessionTicks, seed);
                 default -> throw new IllegalArgumentException("unknown rival: " + rival.displayName());
             });
         }
         // Institutions: ATLAS and CROWN provide liquidity; MERIDIAN trades macro news.
         built.add(new BotRunner(institutions.get(0), null, makerFor(rivals.size()), QUOTE_REFRESH_TICKS,
-                tickFor("NVDO"), rivals.size(), sessionTicks));
+                tickFor("NVDO"), rivals.size(), sessionTicks, seed));
         built.add(new BotRunner(institutions.get(1),
-                new com.virtualinvestor.core.bot.MacroReactionStrategy(0.01, 1_000L), null, 0L));
+                new com.virtualinvestor.core.bot.MacroReactionStrategy(0.01, 1_000L), null, 0L,
+                0.01, 0L, sessionTicks, seed));
         built.add(new BotRunner(institutions.get(2), null, makerFor(rivals.size() + 2),
-                QUOTE_REFRESH_TICKS, tickFor("NVDO"), rivals.size() + 2, sessionTicks));
+                QUOTE_REFRESH_TICKS, tickFor("NVDO"), rivals.size() + 2, sessionTicks, seed));
         return List.copyOf(built);
     }
 
@@ -477,7 +525,9 @@ public final class RunningRound {
             handleTransition(transition, tick, events);
         }
 
-        events.addAll(news.advance(tick));
+        List<GameEvent> newsEvents = news.advance(tick);
+        events.addAll(newsEvents);
+        Map<String, NewsSignal> signals = routeReleases(newsEvents, sectorByTicker, indexTicker);
 
         if (session.phase() == SessionPhase.CONTINUOUS) {
             for (Instrument instrument : universe.all()) {
@@ -498,7 +548,8 @@ public final class RunningRound {
                     }
                     long netPosition = runner.participant().account().position(symbol).netQty();
                     events.addAll(runner.act(engine, fundamental, vol, change, netPosition, tick, equity,
-                            toxicity(symbol), fill -> applyFill(fill, symbol, events, tick)));
+                            toxicity(symbol), signals.get(symbol),
+                            fill -> applyFill(fill, symbol, events, tick)));
                 }
             }
         }
