@@ -30,7 +30,7 @@ public class NarratorConfig {
             case "llama" -> new LlamaCppNarrator(
                     java.net.URI.create(System.getenv().getOrDefault("VI_NARRATOR_URL", "http://127.0.0.1:18080")),
                     java.time.Duration.ofMillis(Long.parseLong(
-                            System.getenv().getOrDefault("VI_NARRATOR_TIMEOUT_MS", "20000"))),
+                            System.getenv().getOrDefault("VI_NARRATOR_TIMEOUT_MS", "60000"))),
                     System.getenv().getOrDefault("VI_NARRATOR_MODEL", "qwen2.5-0.5b-q8"));
             default -> {
                 if (!mode.equals("template")) {

@@ -4,6 +4,7 @@ services:
   db:
     image: postgres:16
     container_name: vi-db
+    restart: unless-stopped
     environment:
       POSTGRES_DB: virtualinvestor
       POSTGRES_USER: vi
@@ -29,6 +30,7 @@ services:
   narrator:
     image: ghcr.io/ggml-org/llama.cpp:server
     container_name: vi-narrator
+    restart: unless-stopped
     profiles:
       - narrator
     ports:

@@ -32,6 +32,10 @@ or with friends in lobby rooms. Sessions are durable and resumable.
 
 ## Install and run
 
+First time here? `./install.sh` (Ubuntu) or `install.bat` (Windows) does steps
+1–4 plus the newsroom weights for you — start with `./install.sh check` (or
+`install.bat check`) for a prerequisites report. Or follow along manually:
+
 **1. Database** (required by the server):
 
 ```bash
@@ -68,6 +72,20 @@ docker compose --profile narrator up -d narrator
 Then start the edge with `VI_NARRATOR=llama` (see `docs/news.md`). Without
 the sidecar, headlines publish with template bodies; the market never waits
 for prose.
+
+**The easy way** — scripted stack control, both platforms:
+
+| | Ubuntu | Windows |
+|---|---|---|
+| First-time setup (with sanity `check`) | `./install.sh` | `install.bat` |
+| Start everything (db, sidecar, edge, web) | `./run.sh` | `run.bat` |
+| Stop everything (data kept) | `./stop.sh` | `stop.bat` |
+
+`run.sh`/`run.bat` take `--no-newsroom` to skip the sidecar. The edge
+defaults to `VI_ADMIN_PASSWORD=changeme` with a loud warning when unset —
+set a real one. Logs land in `.run/edge.log` and `.run/web.log`; the
+services restart automatically after a Docker daemon restart
+(`restart: unless-stopped`).
 
 ## Play your first game
 

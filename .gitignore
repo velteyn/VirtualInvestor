@@ -19,3 +19,6 @@ web/dist/
 
 # Newsroom weights (fetched at install, ~640 MB, not versioned)
 infra/narrator-models/
+
+# run.sh pid files and process logs
+.run/
