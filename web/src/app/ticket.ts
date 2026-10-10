@@ -6,6 +6,7 @@
  */
 import type { OrderCommand, RoundResponse, ServerClient, WirePayload } from '../adapters/serverClient';
 import type { VirtualInvestorTradeFeed } from '../adapters/tradeFeed';
+import companies from '../assets/companies.json';
 
 export interface Ticket {
   destroy(): void;
@@ -15,7 +16,14 @@ export interface Ticket {
 
 export type TicketType = OrderCommand['type'];
 
-const WATCH_SYMBOLS = ['NVDO', 'PEAR', 'VOLT', 'TRLL', 'SOCL'];
+/**
+ * Every tradable equity: the full universe minus the VNDX benchmark (the
+ * index is quoted but not orderable from the ticket). The company tab and the
+ * ticket now agree on what can be traded.
+ */
+const ORDER_SYMBOLS: string[] = (companies as { ticker: string; type: string }[])
+  .filter((company) => company.type !== 'INDEX')
+  .map((company) => company.ticker);
 
 /** Minimal storage surface so sizing memory is unit-testable without a DOM. */
 export interface QtyMemory {
@@ -135,7 +143,7 @@ export function mountTicket(
     <h2>Ticket</h2>
     <label>Symbol
       <select id="vi-tk-symbol">
-        ${WATCH_SYMBOLS.map((ticker) => `<option value="${ticker}">${ticker}</option>`).join('')}
+        ${ORDER_SYMBOLS.map((ticker) => `<option value="${ticker}">${ticker}</option>`).join('')}
       </select>
     </label>
     <div class="vi-ticket-side">
@@ -363,7 +371,7 @@ export function mountTicket(
 
   return {
     prefill(order: { side: 'BUY' | 'SELL'; type: OrderCommand['type']; price?: number; symbol?: string }): void {
-      if (order.symbol !== undefined && WATCH_SYMBOLS.includes(order.symbol)) {
+      if (order.symbol !== undefined && ORDER_SYMBOLS.includes(order.symbol)) {
         symbolSelect.value = order.symbol;
         refreshQty();
       }
