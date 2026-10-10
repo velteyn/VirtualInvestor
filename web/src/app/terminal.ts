@@ -14,6 +14,7 @@ import { mountPanels } from './panels';
 import { mountPortfolio } from './portfolio';
 import { mountTicket } from './ticket';
 import { mountCompany, type Company } from './company';
+import { mountNewsroom } from './newsroom';
 
 export interface Terminal {
   destroy(): void;
@@ -122,10 +123,12 @@ export function mountTerminal(
   });
 
   // Portfolio tab wraps the positions strip (portfolio-tab 3.1); the
-  // company tab joins the same dock once it exists (company-profiles 2.2).
+  // company and newsroom tabs join the same dock once it exists
+  // (company-profiles 2.2, newsroom-narrator 3.2).
   const strip = layout.querySelector<HTMLElement>('.vi-positions');
   const portfolio = strip === null ? null : mountPortfolio(strip, client, round, participant, tradeFeed);
   company = strip === null || portfolio === null ? null : mountCompany(strip);
+  const newsroom = strip === null || portfolio === null ? null : mountNewsroom(strip, client, round);
 
   // A small session banner (kept out of the way on narrow screens).
   const banner = document.createElement('div');
@@ -139,6 +142,7 @@ export function mountTerminal(
       unsubscribeTrades();
       ticket?.destroy();
       company?.destroy();
+      newsroom?.destroy();
       portfolio?.destroy();
       panels.destroy();
       widget.destroy();

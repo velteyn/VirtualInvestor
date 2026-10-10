@@ -116,6 +116,17 @@ export interface FillRow {
   tick: number;
 }
 
+export interface ArticleRow {
+  newsId: string;
+  roundId: string;
+  tick: number;
+  kind: string;
+  tickers: string[];
+  headline: string;
+  body: string;
+  model: string;
+}
+
 export interface OrderCommand {
   clientToken: string;
   symbol: string;
@@ -191,6 +202,11 @@ export class ServerClient {
   /** Per-order fill history for one participant, folded from the round journal. */
   fills(roundId: string, participantId: string): Promise<FillRow[]> {
     return this.post<FillRow[]>('/api/rounds/fills', { roundId, participantId });
+  }
+
+  /** Newsroom archive for one round, oldest-first (newsroom-narrator 1.3). */
+  articles(roundId: string): Promise<ArticleRow[]> {
+    return this.post<ArticleRow[]>('/api/rounds/articles', { roundId });
   }
 
   /** Register a new player; the account pends game-master approval before play. */

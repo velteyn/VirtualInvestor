@@ -354,6 +354,22 @@ body,
   font-size: 13px;
 }
 
+.vi-nr-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 2px;
+}
+
+.vi-nr-item h3 {
+  margin: 8px 0 2px;
+  font-size: 14px;
+}
+
+.vi-nr-item p {
+  margin: 4px 0 10px;
+}
+
 .vi-pf-table td.vi-act button[data-close]:hover,
 .vi-pf-table td.vi-act button[data-cancel]:hover {
   border-color: #ef5350;

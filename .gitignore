@@ -16,3 +16,6 @@ web/dist/
 
 # Logs
 *.log
+
+# Newsroom weights (fetched at install, ~640 MB, not versioned)
+infra/narrator-models/

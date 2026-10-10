@@ -144,6 +144,29 @@ public class RoundController {
     }
 
     /**
+     * Newsroom archive for one round (newsroom-narrator 1.3): stored articles
+     * oldest-first for late joiners and the newsroom tab.
+     */
+    @PostMapping(path = "/rounds/articles", version = "1")
+    public List<ArticleResponse> articles(@RequestBody ArticlesRequest request) {
+        try {
+            return game.articles(request.roundId()).stream()
+                    .map(row -> new ArticleResponse(row.newsId(), row.roundId(), row.tick(),
+                            row.kind().name(), row.tickers(), row.headline(), row.body(), row.model()))
+                    .toList();
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
+        }
+    }
+
+    public record ArticlesRequest(String roundId) {
+    }
+
+    public record ArticleResponse(String newsId, String roundId, long tick, String kind,
+            java.util.List<String> tickers, String headline, String body, String model) {
+    }
+
+    /**
      * Per-fill markouts for one participant (realistic-liquidity 4.1): each fill
      * joined to the first print at or past fill tick + horizon, so execution
      * quality is measurable over the wire. A missing or non-positive horizon

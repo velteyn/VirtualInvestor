@@ -58,6 +58,17 @@ npm run dev
 
 Open `http://localhost:5173/`.
 
+**4. Newsroom sidecar** (optional — headlines gain LLM-written stories):
+
+```bash
+cd infra && ./narrator/fetch-model.sh   # one-time weights download (~640 MB)
+docker compose --profile narrator up -d narrator
+```
+
+Then start the edge with `VI_NARRATOR=llama` (see `docs/news.md`). Without
+the sidecar, headlines publish with template bodies; the market never waits
+for prose.
+
 ## Play your first game
 
 1. **Register** on the login page (pick a bank — it sets your fee tariff),

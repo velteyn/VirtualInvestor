@@ -97,17 +97,19 @@ export function mountPanels(
   // trade frames) flips expired items to "priced in" (news-validity 3.1).
   // Expired news stays readable — bots ignore it, humans still learn from it.
   interface NewsRow {
+    newsId: string;
     badge: string;
     headline: string;
     releaseTick: number;
     validityTicks: number;
+    hasStory: boolean;
   }
   const news: NewsRow[] = [];
   let newestTick = 0;
   const renderNews = (): void => {
     newsRows.innerHTML = news.map((row) => {
       const pricedIn = row.validityTicks > 0 && newestTick > row.releaseTick + row.validityTicks;
-      const badge = pricedIn ? `${row.badge} · priced in` : row.badge;
+      const badge = `${row.badge}${row.hasStory ? ' · full story' : ''}${pricedIn ? ' · priced in' : ''}`;
       return `<li><div class="vi-news-meta">${escape(badge)}</div><div>${escape(row.headline)}</div></li>`;
     }).join('');
   };
@@ -125,11 +127,20 @@ export function mountPanels(
     }
     const releaseTick = Number(payload.tick);
     const validityTicks = Number(payload.durationTicks);
+    // Same-newsId re-broadcasts (newsroom-narrator 2.3: the article body
+    // arrived) refresh the row in place instead of duplicating it.
+    const newsId = String(payload.newsId ?? '');
+    const at = news.findIndex((row) => row.newsId === newsId);
+    if (at >= 0) {
+      news.splice(at, 1);
+    }
     news.unshift({
+      newsId,
       badge: `${String(payload.source)} · ${String(payload.scope)}`,
       headline: String(payload.headline),
       releaseTick: Number.isFinite(releaseTick) ? releaseTick : 0,
       validityTicks: Number.isFinite(validityTicks) ? validityTicks : 0,
+      hasStory: typeof payload.body === 'string' && payload.body.length > 80,
     });
     news.length = Math.min(news.length, 20);
     renderNews();

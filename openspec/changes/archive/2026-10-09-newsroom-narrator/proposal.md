@@ -14,8 +14,8 @@ machine already simulates the world; what it lacks is a voice describing it.
 - A decoupled narrator plugin that subscribes to news releases (plus round
   start/end markers) and writes short articles out-of-band via an external
   LLM sidecar (llama.cpp, ~1B model for the i5/8GB reality).
-- Article bodies ride the existing news wire (`NewsDto.body`, today always
-  empty — zero protocol change) and persist in a new articles table so late
+- Article bodies ride the existing news wire (`NewsDto.body`, today a short
+  generator note — zero protocol change) and persist in a new articles table so late
   joiners can read the session's story so far.
 - A newsroom tab in the terminal listing the round's articles.
 - Degradation ladder, worst case first: sidecar down → template articles built

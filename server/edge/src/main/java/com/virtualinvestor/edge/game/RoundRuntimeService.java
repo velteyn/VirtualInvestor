@@ -22,13 +22,24 @@ import org.springframework.stereotype.Service;
 public class RoundRuntimeService {
 
     private final RoundBroadcaster broadcaster;
+    private final NewsroomService newsroom;
     private final Map<String, RunningRound> rounds = new ConcurrentHashMap<>();
     private final Map<String, RealTimeDriver> drivers = new ConcurrentHashMap<>();
     /** Held rooms remember whether to drive in real time once started. */
     private final Map<String, Boolean> realTime = new ConcurrentHashMap<>();
 
     public RoundRuntimeService(RoundBroadcaster broadcaster) {
+        this(broadcaster, null);
+    }
+
+    /**
+     * Production wiring: the newsroom files articles per round (newsroom-narrator
+     * 2.3). Tests keep the single-arg constructor, which runs without narration.
+     */
+    @org.springframework.beans.factory.annotation.Autowired
+    public RoundRuntimeService(RoundBroadcaster broadcaster, NewsroomService newsroom) {
         this.broadcaster = broadcaster;
+        this.newsroom = newsroom;
     }
 
     /** Create and start a round, running its loop in real time. */
@@ -45,10 +56,13 @@ public class RoundRuntimeService {
     public RunningRound start(String roundId, long seed, LaunchConfig config, boolean runInRealTime,
             long stepMillis, List<com.virtualinvestor.core.participant.HumanParticipant> extraHumans) {
         RunningRound round = new RunningRound(roundId, seed, config, stepMillis, extraHumans);
-        round.setPublisher(broadcaster);
+        round.setPublisher(new RoundEvents(roundId, broadcaster, newsroom));
         broadcaster.bindEngines(() -> round.engines().values().stream().toList());
         round.start();
         rounds.put(roundId, round);
+        if (newsroom != null) {
+            newsroom.preview(roundId, config.preset().name(), config.startingCapital());
+        }
         if (runInRealTime) {
             // Drive the ROUND's step (not the bare clock), so the world actually advances.
             RealTimeDriver driver = new RealTimeDriver(round.clock(), round::stepQuietly);
@@ -75,11 +89,14 @@ public class RoundRuntimeService {
     public RunningRound hold(String roundId, long seed, LaunchConfig config, long stepMillis,
             List<HumanParticipant> extras, boolean runInRealTime, String playerName) {
         RunningRound round = new RunningRound(roundId, seed, config, stepMillis, extras, playerName);
-        round.setPublisher(broadcaster);
+        round.setPublisher(new RoundEvents(roundId, broadcaster, newsroom));
         broadcaster.bindEngines(() -> round.engines().values().stream().toList());
         round.hold();
         rounds.put(roundId, round);
         realTime.put(roundId, runInRealTime);
+        if (newsroom != null) {
+            newsroom.preview(roundId, config.preset().name(), config.startingCapital());
+        }
         return round;
     }
 
@@ -108,6 +125,9 @@ public class RoundRuntimeService {
         stop(roundId);
         rounds.remove(roundId);
         realTime.remove(roundId);
+        if (newsroom != null) {
+            newsroom.forget(roundId);
+        }
     }
 
     /** Pause a running round: its clock stops advancing. */

@@ -180,6 +180,17 @@ public class GameService {
     }
 
     /**
+     * Newsroom archive for one round (newsroom-narrator 1.3): stored articles
+     * oldest-first, so late joiners read the session's story so far.
+     */
+    public List<com.virtualinvestor.persist.article.ArticleStore.Article> articles(String roundId) {
+        if (durability.get(roundId) == null && runtime.round(roundId).isEmpty()) {
+            throw new IllegalArgumentException("unknown round: " + roundId);
+        }
+        return new com.virtualinvestor.persist.article.ArticleStore(dataSource).listByRound(roundId);
+    }
+
+    /**
      * Fill history for one participant (portfolio-tab 2.1): flush the journal, fold
      * the round's log, price fees under the participant's current bank schedule.
      */

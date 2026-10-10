@@ -21,5 +21,32 @@ services:
       timeout: 5s
       retries: 10
 
+  # Newsroom sidecar (newsroom-narrator): dockerized llama.cpp serving the
+  # preconfigured tiny model. Opt-in via profile so a stock checkout behaves
+  # exactly as before: `docker compose --profile narrator up -d`. The edge
+  # reaches it at VI_NARRATOR_URL (default http://127.0.0.1:18080) with
+  # VI_NARRATOR=llama; anything else keeps templates or bare headlines.
+  narrator:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    container_name: vi-narrator
+    profiles:
+      - narrator
+    ports:
+      # Localhost only, like the db: only this host's game server calls it.
+      # Container port 8081 (see entrypoint.sh): host-filtered 8080 stays clear.
+      - "127.0.0.1:18080:8081"
+    volumes:
+      - ./narrator-models:/models
+      - ./narrator/fetch-model.sh:/fetch-model.sh:ro
+      - ./narrator/entrypoint.sh:/entrypoint.sh:ro
+    environment:
+      MODEL_FILE: qwen2.5-0.5b-instruct-q8_0.gguf
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8081/health > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
 volumes:
   pgdata:

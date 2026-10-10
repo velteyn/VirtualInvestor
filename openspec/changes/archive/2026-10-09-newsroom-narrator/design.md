@@ -6,7 +6,7 @@ See proposal.md (Why). Current state, verified in code:
 
 - Releases are domain events (`GameEvent.NewsReleased` with magnitude, symbol, sector, scope, tick, duration) folded by `RunningRound.routeReleases` into bot `NewsSignal`s on the deterministic path.
 - The edge projects releases to `WireMessage.NewsDto`, which already carries a `body` field — always empty today. The web `VirtualInvestorNewsFeed` already maps `payload.body` to its item `summary`. Articles can ride the existing wire with zero protocol change.
-- Server modules are `core`, `edge`, `game`, `persist`, `runtime`. `persist` has `event/`, `session/`, `player/`, `projection/`, `snapshot/` packages backed by Postgres (`infra/docker-compose.yml` runs only the DB).
+- Server modules are `core`, `edge`, `game`, `persist`, `runtime`. `persist` has `event/`, `session/`, `player/`, `projection/`, `snapshot/` packages backed by Postgres (`infra/docker-compose.yml` runs the DB, plus the opt-in `narrator` profile with the dockerized llama.cpp sidecar).
 - `company-profiles` is archived: 21 fictional profiles exist as content, and the company-tab mounting pattern is the template for the newsroom tab.
 - Machine reality from exploration: i5/8GB → llama.cpp server mode with a ~1B Q4 model at roughly 10–30 tok/s; a 150-word article costs ~10–25s.
 
@@ -28,7 +28,7 @@ See proposal.md (Why). Current state, verified in code:
 
 **1. Tap the edge projection, not the simulation (over hooking `NewsGenerator` or `RunningRound`).**
 
-The deterministic path (`NewsGenerator` → `routeReleases` → bots) stays byte-identical. The narrator subscribes where `NewsReleased` becomes `NewsDto`: headlines publish instantly with empty bodies, and a completed article re-broadcasts the same `newsId` with `body` filled and `stage: "article"`. The web feed upserts by `newsId` (tiny adapter change) so the wire stays a single stream.
+The deterministic path (`NewsGenerator` → `routeReleases` → bots) stays byte-identical. The narrator subscribes where `NewsReleased` becomes `NewsDto`: headlines publish instantly with their generator note (`"Wire report"` / `"Scheduled earnings release for …"` — the body field was never empty), and a completed article re-broadcasts the same `newsId` with the body replaced by the story. The web feed upserts by `newsId` (tiny adapter change) so the wire stays a single stream.
 
 **2. New `server/narrator` module behind a `Narrator` interface (over a package inside `runtime`).**
 
@@ -55,4 +55,4 @@ The system prompt pins the 21 fictional names and forbids real companies, outlet
 
 ## Migration Plan
 
-Disabled/template by default — every step ships dark. Order: measure release volume → persist + endpoint → narrator module with template first → wire fill + client upsert → sidecar client + prompt/filter → newsroom tab → docs. Rollback at any point is `vi.narrator.enabled=false`. Figure-like flow: `NewsReleased` → edge projection (headline now) → narrator queue (article later) → same-`newsId` payload + articles row → feed upsert + newsroom tab.
+Disabled/template by default — every step ships dark. Order: measure release volume → persist + endpoint → narrator module with template first → wire fill + client upsert → sidecar client + prompt/filter → newsroom tab → docs. Rollback at any point is `vi.narrator.enabled=false`. Figure-like flow: `NewsReleased` → edge projection (headline now) → narrator queue (article later) → same-`newsId` payload + articles row → feed upsert + newsroom tab. The marker for "article arrived" is a story-length body replacing the generator note; the stage keeps its original value, so no core enum change.

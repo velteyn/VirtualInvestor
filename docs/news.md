@@ -82,6 +82,47 @@ resolution plays out through fundamentals and volatility only — hunters who
 bought a denied rumor eat the loss, and both desks run lifetime-negative on
 news flow in the baselines.
 
+## Newsroom narrator
+
+Headlines gain story bodies from the `server/narrator` module: the edge
+re-broadcasts the same news id with the body filled once the article is ready,
+and the terminal upserts it in place (no duplicates) with a "full story"
+marker. Articles persist in the `articles` table and are served to late joiners
+via `POST /api/rounds/articles`. Bots never read articles — `NewsSignal`s stay
+the only machine-readable news — and the simulation never waits for prose.
+
+Degradation ladder: sidecar LLM → template bodies (headline + subjects, no
+model) → bare headlines. Every headline is article-eligible except random
+company noise; earnings, sector, macro and structural releases are narrated up
+to a per-round cap of 40 with skip-on-overflow. Round preview and recap are
+reserved kinds outside the selection policy.
+
+### Bringing up the sidecar (opt-in)
+
+The sidecar is a dockerized llama.cpp server, an integral part of the
+project — no local install needed:
+
+1. Fetch the weights once (install phase, ~640 MB, gitignored):
+   `infra/narrator/fetch-model.sh`. Default is Qwen2.5-0.5B-Instruct Q8, the
+   smallest usable instruct model in the families from exploration; it writes
+   a 150-word story in ~20s on the reference i5/8GB box. (For richer prose,
+   swap `MODEL_FILE`/`MODEL_URL` to the 1.5B sibling.)
+2. `docker compose --profile narrator up -d` from `infra/` (the entrypoint
+   refetches if the weights are missing). The server listens on
+   `127.0.0.1:18080` — localhost only, like the db. Container port is 8081,
+   not 8080: some hosts filter outbound traffic to container port 8080.
+3. Start the edge with `VI_NARRATOR=llama` (optional `VI_NARRATOR_URL`,
+   `VI_NARRATOR_TIMEOUT_MS`, `VI_NARRATOR_MODEL` label for the articles table).
+4. Verify: await a release, then check the article lands — the headline's row
+   gains "full story" in the terminal, and the articles endpoint lists it
+   with the model label. With the sidecar down, headlines still publish
+   instantly and templates stand in; with `VI_NARRATOR=disabled`, the wire
+   carries bare headlines exactly as before the newsroom existed.
+
+The prompt pins the 21 fictional names and forbids real companies, outlets and
+advice; every body passes a denylist post-filter that drops on hit, leaving
+the headline standing alone. No player input ever enters a prompt.
+
 ## Not yet implemented
 
 - Human-facing delivery cadence and fairness (spec: fair human cadence) — arrives with the
