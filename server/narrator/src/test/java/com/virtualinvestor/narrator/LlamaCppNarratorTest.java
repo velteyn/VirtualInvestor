@@ -77,6 +77,17 @@ class LlamaCppNarratorTest {
         assertTrue(prompt.contains("Pear Computers Inc beats quarterly expectations"));
         assertTrue(prompt.contains("ONLY these fictional company names"));
         assertTrue(prompt.contains("Never advise buying or selling"));
+        assertTrue(prompt.contains("Never invent dollar amounts"));
+        assertTrue(prompt.contains("Never repeat a sentence"));
+    }
+
+    @Test
+    void dedupeSentencesKeepsFirstOccurrence() {
+        String looped = "The gaming industry is fast-growing. The gaming industry is fast-growing. "
+                + "New customers arrive daily.";
+
+        assertEquals("The gaming industry is fast-growing. New customers arrive daily.",
+                LlamaCppNarrator.dedupeSentences(looped));
     }
 
     @Test

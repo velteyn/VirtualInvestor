@@ -51,7 +51,8 @@ public final class LlamaCppNarrator implements Narrator {
         }
         try {
             String payload = "{\"prompt\":" + jsonString(promptFor(request))
-                    + ",\"n_predict\":160,\"temperature\":0.7,\"stop\":[\"\\n\\n\\n\"]}";
+                    + ",\"n_predict\":160,\"temperature\":0.7,\"repeat_penalty\":1.15,\"repeat_last_n\":64,"
+                    + "\"penalize_nl\":false,\"stop\":[\"\\n\\n\\n\"]}";
             HttpRequest httpRequest = HttpRequest.newBuilder(endpoint.resolve("/completion"))
                     .timeout(timeout)
                     .header("Content-Type", "application/json")
@@ -63,6 +64,7 @@ public final class LlamaCppNarrator implements Narrator {
                 return Optional.empty();
             }
             String body = extractContent(response.body()).map(String::trim).filter(s -> !s.isEmpty())
+                    .map(LlamaCppNarrator::dedupeSentences).filter(s -> !s.isEmpty())
                     .orElse(null);
             if (body == null || denied(body)) {
                 return Optional.empty();
@@ -77,13 +79,37 @@ public final class LlamaCppNarrator implements Narrator {
     static String promptFor(Request request) {
         String subjects = request.subjectNames().isEmpty() ? "the broad market"
                 : String.join(", ", request.subjectNames());
-        return "Write a 3 to 5 sentence market news story for a fictional stock-market game. "
+        return "Write a news story of at most 120 words, 3 to 5 sentences, for a fictional stock-market game. "
+                + "Never repeat a sentence. Never invent dollar amounts, prices, percentages, or deal values. "
                 + "Facts. Headline: " + request.headline() + ". Subjects: " + subjects + ". "
                 + (request.sector() == null || request.sector().isBlank() ? ""
                         : "Sector: " + request.sector() + ". ")
-                + "Signed shock: " + String.format("%.3f", request.magnitude()) + ". "
                 + "Rules. Use ONLY these fictional company names. Never mention real companies, "
                 + "products, or news outlets. Never advise buying or selling. Plain prose, no headline. Story:";
+    }
+
+    /**
+     * Drop exact-duplicate sentences (small models loop): first occurrence wins,
+     * order preserved. A single sentence is returned untouched.
+     */
+    static String dedupeSentences(String body) {
+        String[] parts = body.split("(?<=\\.\\s)|(?<=!\\s)|(?<=\\?\\s)");
+        java.util.LinkedHashSet<String> seen = new java.util.LinkedHashSet<>();
+        StringBuilder out = new StringBuilder();
+        for (String part : parts) {
+            String sentence = part.trim();
+            if (sentence.isEmpty()) {
+                continue;
+            }
+            String key = sentence.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
+            if (seen.add(key)) {
+                if (out.length() > 0) {
+                    out.append(' ');
+                }
+                out.append(sentence);
+            }
+        }
+        return out.toString();
     }
 
     /** True when the body names reality or advises the reader: drop it. */
