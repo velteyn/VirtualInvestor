@@ -122,7 +122,7 @@ public class NewsroomService {
                 }
                 // Same newsId, same addressing, original stage: only the body fills in,
                 // so the feed upsert is a pure content update.
-                broadcaster.broadcast(new WireMessage.NewsDto(news.newsId(), news.source(),
+                broadcaster.broadcast(roundId, new WireMessage.NewsDto(news.newsId(), news.source(),
                         news.scope().name(), news.symbol(), news.sector(), news.headline(), draft.body(),
                         news.magnitude(), news.durationTicks(), news.stage().name(), news.tick()));
             });
@@ -141,7 +141,7 @@ public class NewsroomService {
             log.warn("newsroom store failed for {}: {}", request.newsId(), e.toString());
             return;
         }
-        broadcaster.broadcast(new WireMessage.NewsDto(request.newsId(), "NEWSROOM", request.scope(), null,
+        broadcaster.broadcast(roundId, new WireMessage.NewsDto(request.newsId(), "NEWSROOM", request.scope(), null,
                 null, headline, body, request.magnitude(), 0L, "CONFIRMED", request.tick()));
     }
 

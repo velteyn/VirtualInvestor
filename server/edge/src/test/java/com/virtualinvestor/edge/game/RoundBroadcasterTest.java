@@ -22,7 +22,8 @@ class RoundBroadcasterTest {
         MarketBroadcaster broadcaster = new MarketBroadcaster();
         RecordingWebSocketSession session = new RecordingWebSocketSession();
         broadcaster.register(session);
-        RoundBroadcaster bridge = new RoundBroadcaster(broadcaster);
+        broadcaster.join(session, "r1");
+        RoundBroadcaster bridge = new RoundBroadcaster(broadcaster, "r1");
 
         InstrumentEngine engine = new InstrumentEngine("NVDO", 100.0);
         engine.rest(new RestingOrder("b1", "MARK", "NVDO", OrderSide.BUY, 99.9, 500L));
@@ -59,7 +60,8 @@ class RoundBroadcasterTest {
         MarketBroadcaster broadcaster = new MarketBroadcaster();
         RecordingWebSocketSession session = new RecordingWebSocketSession();
         broadcaster.register(session);
-        RoundBroadcaster bridge = new RoundBroadcaster(broadcaster);
+        broadcaster.join(session, "r1");
+        RoundBroadcaster bridge = new RoundBroadcaster(broadcaster, "r1");
         bridge.bindEngines(List::of);
 
         bridge.publish(List.of(
@@ -79,7 +81,8 @@ class RoundBroadcasterTest {
         MarketBroadcaster broadcaster = new MarketBroadcaster();
         RecordingWebSocketSession session = new RecordingWebSocketSession();
         broadcaster.register(session);
-        RoundBroadcaster bridge = new RoundBroadcaster(broadcaster);
+        broadcaster.join(session, "r1");
+        RoundBroadcaster bridge = new RoundBroadcaster(broadcaster, "r1");
         bridge.bindEngines(List::of);
 
         bridge.publish(List.of(
@@ -99,7 +102,8 @@ class RoundBroadcasterTest {
         MarketBroadcaster broadcaster = new MarketBroadcaster();
         RecordingWebSocketSession session = new RecordingWebSocketSession();
         broadcaster.register(session);
-        RoundBroadcaster bridge = new RoundBroadcaster(broadcaster);
+        broadcaster.join(session, "r1");
+        RoundBroadcaster bridge = new RoundBroadcaster(broadcaster, "r1");
         bridge.bindEngines(List::of);
 
         bridge.publish(List.of(
@@ -116,10 +120,37 @@ class RoundBroadcasterTest {
         MarketBroadcaster broadcaster = new MarketBroadcaster();
         RecordingWebSocketSession session = new RecordingWebSocketSession();
         broadcaster.register(session);
-        RoundBroadcaster bridge = new RoundBroadcaster(broadcaster);
+        broadcaster.join(session, "r1");
+        RoundBroadcaster bridge = new RoundBroadcaster(broadcaster, "r1");
 
         bridge.publish(List.of(new GameEvent.Tick(1L, 100L), new GameEvent.RoundPaused("r", 1L)), 1L);
 
         assertEquals(0, session.sent().size());
+    }
+
+    @Test
+    void bridgesConfineFramesToTheirOwnRound() {
+        MarketBroadcaster broadcaster = new MarketBroadcaster();
+        RecordingWebSocketSession a = new RecordingWebSocketSession();
+        RecordingWebSocketSession b = new RecordingWebSocketSession();
+        broadcaster.register(a);
+        broadcaster.register(b);
+        broadcaster.join(a, "r1");
+        broadcaster.join(b, "r2");
+        RoundBroadcaster one = new RoundBroadcaster(broadcaster, "r1");
+        RoundBroadcaster two = new RoundBroadcaster(broadcaster, "r2");
+        one.bindEngines(List::of);
+        two.bindEngines(List::of);
+
+        one.publish(List.of(new GameEvent.TradePrinted("NVDO", 100.0, 10L, OrderSide.BUY, 5L)), 1L);
+        two.publish(List.of(new GameEvent.NewsReleased("n9", "THE_WIRE", NewsScope.MACRO, null, null,
+                "Other game moves", "body", 0.01, 300L, NewsStage.RUMOR, 5L)), 1L);
+
+        String aFrames = String.join("\n", a.sent());
+        String bFrames = String.join("\n", b.sent());
+        assertTrue(aFrames.contains("\"type\":\"trade\""), aFrames);
+        assertTrue(!aFrames.contains("Other game moves"), aFrames);
+        assertTrue(bFrames.contains("Other game moves"), bFrames);
+        assertTrue(!bFrames.contains("\"type\":\"trade\""), bFrames);
     }
 }

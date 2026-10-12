@@ -77,6 +77,7 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
                 return;
             }
             bindings.put(session.getId(), new Binding(join.roundId(), seat.get()));
+            broadcaster.join(session, join.roundId());
             log.info("join bound: round={} seat={} player={} session={}", join.roundId(), seat.get(),
                     identity.get().playerId(), session.getId());
             return;

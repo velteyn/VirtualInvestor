@@ -25,7 +25,7 @@ class GameWebSocketHandlerTest {
 
 
     private static RoundRuntimeService runtime(MarketBroadcaster broadcaster) {
-        return new RoundRuntimeService(new RoundBroadcaster(broadcaster));
+        return new RoundRuntimeService(new MarketBroadcaster());
     }
 
     @Test

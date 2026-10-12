@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.virtualinvestor.core.game.LaunchConfig;
 import com.virtualinvestor.core.rules.RealismPreset;
+import com.virtualinvestor.edge.ws.MarketBroadcaster;
 import com.virtualinvestor.persist.player.PlayerStore;
 import com.virtualinvestor.runtime.RunningRound;
 import java.util.List;
@@ -35,8 +36,7 @@ class GameServiceSeatsTest {
     }
 
     private static GameService game() {
-        return new GameService(new RoundRuntimeService(new RoundBroadcaster(
-                new com.virtualinvestor.edge.ws.MarketBroadcaster())),
+        return new GameService(new RoundRuntimeService(new MarketBroadcaster()),
                 new PlayerService(store), dataSource);
     }
 

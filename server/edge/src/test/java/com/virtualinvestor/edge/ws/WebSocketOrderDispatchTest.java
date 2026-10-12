@@ -32,7 +32,7 @@ class WebSocketOrderDispatchTest {
     @Test
     void ordersRouteToTheTokensSeatNotTheStatedParticipant() throws Exception {
         MarketBroadcaster broadcaster = new MarketBroadcaster();
-        RoundRuntimeService runtime = new RoundRuntimeService(new RoundBroadcaster(broadcaster));
+        RoundRuntimeService runtime = new RoundRuntimeService(broadcaster);
         RunningRound round = runtime.start("r-seat", 5L,
                 new LaunchConfig(100_000.0, 60L, RealismPreset.REALISTIC), false, 60_000L,
                 java.util.List.of(new com.virtualinvestor.core.participant.HumanParticipant("human-2", "Bo",
@@ -64,7 +64,7 @@ class WebSocketOrderDispatchTest {
     @Test
     void aJoinedSocketPlacesAnOrderOnTheRound() throws Exception {
         MarketBroadcaster broadcaster = new MarketBroadcaster();
-        RoundRuntimeService runtime = new RoundRuntimeService(new RoundBroadcaster(broadcaster));
+        RoundRuntimeService runtime = new RoundRuntimeService(broadcaster);
         RunningRound round = runtime.start("r-ws", 5L,
                 new LaunchConfig(100_000.0, 60L, RealismPreset.REALISTIC), false, 60_000L);
         // Step into continuous trading so orders are accepted.
@@ -88,7 +88,7 @@ class WebSocketOrderDispatchTest {
     @Test
     void orderEventsStreamBackToSubscribers() throws Exception {
         MarketBroadcaster broadcaster = new MarketBroadcaster();
-        RoundRuntimeService runtime = new RoundRuntimeService(new RoundBroadcaster(broadcaster));
+        RoundRuntimeService runtime = new RoundRuntimeService(broadcaster);
         RunningRound round = runtime.start("r-ws2", 6L,
                 new LaunchConfig(100_000.0, 60L, RealismPreset.REALISTIC), false, 60_000L);
         for (int i = 0; i < 4; i++) {

@@ -23,8 +23,9 @@ class BotOnlyRoundIntegrationTest {
         MarketBroadcaster broadcaster = new MarketBroadcaster();
         RecordingWebSocketSession subscriber = new RecordingWebSocketSession();
         broadcaster.register(subscriber);
+        broadcaster.join(subscriber, "round-bots");
 
-        RoundRuntimeService runtime = new RoundRuntimeService(new RoundBroadcaster(broadcaster));
+        RoundRuntimeService runtime = new RoundRuntimeService(broadcaster);
         // A 1-minute step gives a 60-tick session, runnable in a test.
         RunningRound round = runtime.start("round-bots", 20261002L,
                 new LaunchConfig(100_000.0, 60L, RealismPreset.REALISTIC), false, 60_000L);

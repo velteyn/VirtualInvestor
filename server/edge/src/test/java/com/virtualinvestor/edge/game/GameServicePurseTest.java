@@ -8,6 +8,7 @@ import com.virtualinvestor.core.domain.OrderSide;
 import com.virtualinvestor.core.domain.OrderType;
 import com.virtualinvestor.core.game.LaunchConfig;
 import com.virtualinvestor.core.rules.RealismPreset;
+import com.virtualinvestor.edge.ws.MarketBroadcaster;
 import com.virtualinvestor.persist.player.PlayerStore;
 import com.virtualinvestor.runtime.RunningRound;
 import java.util.Map;
@@ -39,8 +40,7 @@ class GameServicePurseTest {
     @Test
     void settlementWritesBackAndNextRoundResets() {
         PlayerService players = new PlayerService(store);
-        GameService game = new GameService(new RoundRuntimeService(new RoundBroadcaster(
-                new com.virtualinvestor.edge.ws.MarketBroadcaster())), players, dataSource);
+        GameService game = new GameService(new RoundRuntimeService(new MarketBroadcaster()), players, dataSource);
         String name = "purse-" + UUID.randomUUID().toString().substring(0, 8);
         String playerId = store.register(name, "secret-1", "first-ledger").playerId();
         store.approve(playerId);
@@ -80,8 +80,7 @@ class GameServicePurseTest {
     @Test
     void wiredBotsPayTheirBanksAfterTrading() {
         PlayerService players = new PlayerService(store);
-        GameService game = new GameService(new RoundRuntimeService(new RoundBroadcaster(
-                new com.virtualinvestor.edge.ws.MarketBroadcaster())), players, dataSource);
+        GameService game = new GameService(new RoundRuntimeService(new MarketBroadcaster()), players, dataSource);
         GameService.RoundView view = game.createRound(
                 new LaunchConfig(100_000.0, 60L, RealismPreset.REALISTIC), java.util.List.<String>of(),
                 false, 60_000L);

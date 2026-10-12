@@ -6,6 +6,7 @@ import com.virtualinvestor.core.domain.RoundState;
 import com.virtualinvestor.core.game.LaunchConfig;
 import com.virtualinvestor.core.participant.HumanParticipant;
 import com.virtualinvestor.edge.wire.WireMessage;
+import com.virtualinvestor.edge.ws.MarketBroadcaster;
 import com.virtualinvestor.runtime.RunningRound;
 import java.util.List;
 import java.util.Map;
@@ -21,14 +22,14 @@ import org.springframework.stereotype.Service;
 @Service
 public class RoundRuntimeService {
 
-    private final RoundBroadcaster broadcaster;
+    private final MarketBroadcaster broadcaster;
     private final NewsroomService newsroom;
     private final Map<String, RunningRound> rounds = new ConcurrentHashMap<>();
     private final Map<String, RealTimeDriver> drivers = new ConcurrentHashMap<>();
     /** Held rooms remember whether to drive in real time once started. */
     private final Map<String, Boolean> realTime = new ConcurrentHashMap<>();
 
-    public RoundRuntimeService(RoundBroadcaster broadcaster) {
+    public RoundRuntimeService(MarketBroadcaster broadcaster) {
         this(broadcaster, null);
     }
 
@@ -37,7 +38,7 @@ public class RoundRuntimeService {
      * 2.3). Tests keep the single-arg constructor, which runs without narration.
      */
     @org.springframework.beans.factory.annotation.Autowired
-    public RoundRuntimeService(RoundBroadcaster broadcaster, NewsroomService newsroom) {
+    public RoundRuntimeService(MarketBroadcaster broadcaster, NewsroomService newsroom) {
         this.broadcaster = broadcaster;
         this.newsroom = newsroom;
     }
@@ -56,8 +57,9 @@ public class RoundRuntimeService {
     public RunningRound start(String roundId, long seed, LaunchConfig config, boolean runInRealTime,
             long stepMillis, List<com.virtualinvestor.core.participant.HumanParticipant> extraHumans) {
         RunningRound round = new RunningRound(roundId, seed, config, stepMillis, extraHumans);
-        round.setPublisher(new RoundEvents(roundId, broadcaster, newsroom));
-        broadcaster.bindEngines(() -> round.engines().values().stream().toList());
+        RoundBroadcaster bridge = new RoundBroadcaster(broadcaster, roundId);
+        bridge.bindEngines(() -> round.engines().values().stream().toList());
+        round.setPublisher(new RoundEvents(roundId, bridge, newsroom));
         round.start();
         rounds.put(roundId, round);
         if (newsroom != null) {
@@ -89,8 +91,9 @@ public class RoundRuntimeService {
     public RunningRound hold(String roundId, long seed, LaunchConfig config, long stepMillis,
             List<HumanParticipant> extras, boolean runInRealTime, String playerName) {
         RunningRound round = new RunningRound(roundId, seed, config, stepMillis, extras, playerName);
-        round.setPublisher(new RoundEvents(roundId, broadcaster, newsroom));
-        broadcaster.bindEngines(() -> round.engines().values().stream().toList());
+        RoundBroadcaster bridge = new RoundBroadcaster(broadcaster, roundId);
+        bridge.bindEngines(() -> round.engines().values().stream().toList());
+        round.setPublisher(new RoundEvents(roundId, bridge, newsroom));
         round.hold();
         rounds.put(roundId, round);
         realTime.put(roundId, runInRealTime);

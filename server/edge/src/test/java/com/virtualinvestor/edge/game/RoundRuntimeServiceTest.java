@@ -17,7 +17,7 @@ class RoundRuntimeServiceTest {
     @Test
     void startBeginsARunningRoundWithWarmupAndStreaming() {
         MarketBroadcaster broadcaster = new MarketBroadcaster();
-        RoundRuntimeService runtime = new RoundRuntimeService(new RoundBroadcaster(broadcaster));
+        RoundRuntimeService runtime = new RoundRuntimeService(new MarketBroadcaster());
 
         RunningRound round = runtime.start("r1", 61L,
                 new LaunchConfig(100_000.0, 60L, RealismPreset.REALISTIC), false);
@@ -30,7 +30,7 @@ class RoundRuntimeServiceTest {
 
     @Test
     void pauseAndResumeChangeTheLifecycleState() {
-        RoundRuntimeService runtime = new RoundRuntimeService(new RoundBroadcaster(new MarketBroadcaster()));
+        RoundRuntimeService runtime = new RoundRuntimeService(new MarketBroadcaster());
         runtime.start("r2", 62L, new LaunchConfig(100_000.0, 60L, RealismPreset.REALISTIC), false);
 
         runtime.pause("r2");
@@ -42,7 +42,7 @@ class RoundRuntimeServiceTest {
 
     @Test
     void submittedCommandsReachTheRound() {
-        RoundRuntimeService runtime = new RoundRuntimeService(new RoundBroadcaster(new MarketBroadcaster()));
+        RoundRuntimeService runtime = new RoundRuntimeService(new MarketBroadcaster());
         RunningRound round = runtime.start("r3", 63L,
                 new LaunchConfig(100_000.0, 60L, RealismPreset.REALISTIC), false);
 

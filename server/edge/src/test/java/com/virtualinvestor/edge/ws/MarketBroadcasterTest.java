@@ -17,8 +17,10 @@ class MarketBroadcasterTest {
         broadcaster.register(a);
         broadcaster.register(b);
         assertEquals(2, broadcaster.sessionCount());
+        broadcaster.join(a, "r1");
+        broadcaster.join(b, "r1");
 
-        broadcaster.broadcast(new WireMessage.TradeDto("ACME", 100.0, 10L, "BUY", 1L));
+        broadcaster.broadcast("r1", new WireMessage.TradeDto("ACME", 100.0, 10L, "BUY", 1L));
 
         assertEquals(1, a.sent().size());
         assertEquals(1, b.sent().size());
@@ -30,11 +32,12 @@ class MarketBroadcasterTest {
         MarketBroadcaster broadcaster = new MarketBroadcaster();
         RecordingWebSocketSession session = new RecordingWebSocketSession();
         broadcaster.register(session);
+        broadcaster.join(session, "r1");
 
-        broadcaster.depth(new WireMessage.DepthDto("ACME",
+        broadcaster.depth("r1", new WireMessage.DepthDto("ACME",
                 List.of(new WireMessage.DepthDto.Level(99.9, 100L)),
                 List.of(new WireMessage.DepthDto.Level(100.1, 100L)), 100.0, 1L));
-        broadcaster.depth(new WireMessage.DepthDto("ACME",
+        broadcaster.depth("r1", new WireMessage.DepthDto("ACME",
                 List.of(new WireMessage.DepthDto.Level(99.8, 200L)),
                 List.of(new WireMessage.DepthDto.Level(100.2, 200L)), 100.0, 2L));
 
@@ -49,7 +52,7 @@ class MarketBroadcasterTest {
         broadcaster.register(session);
         broadcaster.unregister(session);
 
-        broadcaster.broadcast(new WireMessage.TradeDto("ACME", 100.0, 10L, "BUY", 1L));
+        broadcaster.broadcast("r1", new WireMessage.TradeDto("ACME", 100.0, 10L, "BUY", 1L));
         assertTrue(session.sent().isEmpty());
         assertEquals(0, broadcaster.sessionCount());
     }
@@ -64,6 +67,7 @@ class MarketBroadcasterTest {
                 new StrictWebSocketSession(), new StrictWebSocketSession(),
                 new StrictWebSocketSession(), new StrictWebSocketSession());
         sessions.forEach(broadcaster::register);
+        sessions.forEach(session -> broadcaster.join(session, "r1"));
 
         int drivers = 8;
         int perDriver = 300;
@@ -80,7 +84,7 @@ class MarketBroadcasterTest {
                     Thread.currentThread().interrupt();
                 }
                 for (int i = 0; i < perDriver; i++) {
-                    broadcaster.broadcast(new WireMessage.TradeDto("ACME", 100.0, 10L, "BUY", 1L));
+                    broadcaster.broadcast("r1", new WireMessage.TradeDto("ACME", 100.0, 10L, "BUY", 1L));
                 }
                 return null;
             });
@@ -202,5 +206,61 @@ class MarketBroadcasterTest {
         public java.util.List<org.springframework.web.socket.WebSocketExtension> getExtensions() {
             return List.of();
         }
+    }
+
+    @Test
+    void framesStayInsideTheirRound() {
+        MarketBroadcaster broadcaster = new MarketBroadcaster();
+        RecordingWebSocketSession a = new RecordingWebSocketSession();
+        RecordingWebSocketSession b = new RecordingWebSocketSession();
+        RecordingWebSocketSession unbound = new RecordingWebSocketSession();
+        broadcaster.register(a);
+        broadcaster.register(b);
+        broadcaster.register(unbound);
+        broadcaster.join(a, "r1");
+        broadcaster.join(b, "r2");
+
+        broadcaster.broadcast("r1", new WireMessage.TradeDto("ACME", 100.0, 10L, "BUY", 1L));
+
+        assertEquals(1, a.sent().size());
+        assertTrue(b.sent().isEmpty(), "round-2 socket must not see round-1 frames");
+        assertTrue(unbound.sent().isEmpty(), "unbound sockets receive nothing");
+    }
+
+    @Test
+    void rejoinMovesTheSocket() {
+        MarketBroadcaster broadcaster = new MarketBroadcaster();
+        RecordingWebSocketSession session = new RecordingWebSocketSession();
+        broadcaster.register(session);
+        broadcaster.join(session, "r1");
+        broadcaster.join(session, "r2");
+
+        broadcaster.broadcast("r1", new WireMessage.TradeDto("ACME", 100.0, 10L, "BUY", 1L));
+        broadcaster.broadcast("r2", new WireMessage.TradeDto("ACME", 101.0, 10L, "BUY", 2L));
+
+        assertEquals(1, session.sent().size());
+        assertTrue(session.sent().get(0).contains("101.0"));
+    }
+
+    @Test
+    void depthCoalescingIsPerRound() {
+        MarketBroadcaster broadcaster = new MarketBroadcaster();
+        RecordingWebSocketSession session = new RecordingWebSocketSession();
+        broadcaster.register(session);
+        broadcaster.join(session, "r1");
+
+        // A burst for another round must not suppress this round's first send.
+        broadcaster.depth("r2", depth("ACME", 99.0));
+        broadcaster.depth("r2", depth("ACME", 98.0));
+        broadcaster.depth("r1", depth("ACME", 97.0));
+
+        assertEquals(1, session.sent().size());
+        assertTrue(session.sent().get(0).contains("97.0"));
+    }
+
+    private static WireMessage.DepthDto depth(String symbol, double bid) {
+        return new WireMessage.DepthDto(symbol,
+                List.of(new WireMessage.DepthDto.Level(bid, 100L)),
+                List.of(new WireMessage.DepthDto.Level(bid + 2.0, 100L)), 100.0, 1L);
     }
 }

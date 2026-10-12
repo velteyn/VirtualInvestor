@@ -19,7 +19,7 @@ class WireOrderRoundIntegrationTest {
 
     @Test
     void wireOrdersProduceFillsAndPositions() {
-        RoundRuntimeService runtime = new RoundRuntimeService(new RoundBroadcaster(new MarketBroadcaster()));
+        RoundRuntimeService runtime = new RoundRuntimeService(new MarketBroadcaster());
         RunningRound round = runtime.start("round-wire", 81L,
                 new LaunchConfig(100_000.0, 60L, RealismPreset.REALISTIC), false, 60_000L);
 
@@ -43,7 +43,7 @@ class WireOrderRoundIntegrationTest {
 
     @Test
     void clientOrderFillsAndSettlementMarksThePosition() {
-        RoundRuntimeService runtime = new RoundRuntimeService(new RoundBroadcaster(new MarketBroadcaster()));
+        RoundRuntimeService runtime = new RoundRuntimeService(new MarketBroadcaster());
         RunningRound round = runtime.start("round-wire-2", 82L,
                 new LaunchConfig(100_000.0, 60L, RealismPreset.REALISTIC), false, 60_000L);
         for (int i = 0; i < 4; i++) {
