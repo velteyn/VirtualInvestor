@@ -26,8 +26,6 @@ import com.virtualinvestor.core.instrument.Instrument;
 import com.virtualinvestor.core.instrument.InstrumentUniverse;
 import com.virtualinvestor.core.instrument.SeriesLister;
 import com.virtualinvestor.core.instrument.SeriesSymbols;
-import com.virtualinvestor.core.pricing.OptionPricing;
-import com.virtualinvestor.core.pricing.SeriesMarks;
 import com.virtualinvestor.core.market.Bar;
 import com.virtualinvestor.core.news.NewsEngine;
 import com.virtualinvestor.core.news.NewsGenerator;
@@ -469,7 +467,12 @@ public final class RunningRound {
     public void start() {
         lifecycle.transitionTo(RoundState.WARMUP);
         if (!warmedUp) {
-            history = warmup.generateHistory(universe, fundamentals, 60L, 60L, 1_700_000_000L);
+            history = new java.util.LinkedHashMap<>(
+                    warmup.generateHistory(universe, fundamentals, 60L, 60L, 1_700_000_000L));
+            // Listed series open with derived history (same bar count, seed-exact).
+            double yearsToBell = sessionTicks * stepMillis / (double) YEAR_MILLIS;
+            history.putAll(com.virtualinvestor.core.game.WarmupGenerator.seriesHistory(
+                    universe, history, yearsToBell));
             // Open each instrument at its warmed-up fundamental so books and circuit breakers
             // start consistent with the market rather than at the stale reference price.
             for (Instrument instrument : universe.spots()) {
@@ -589,6 +592,9 @@ public final class RunningRound {
             for (String symbol : quotedSeries) {
                 InstrumentEngine engine = engines.get(symbol);
                 double reference = seriesReference(symbol, yearsLeft);
+                if (!Double.isFinite(reference) || reference <= 0.0) {
+                    continue;
+                }
                 for (BotRunner runner : runners) {
                     long netPosition = runner.participant().account().position(symbol).netQty();
                     double equity = runner.participant().account().equity(seriesMarks);
@@ -975,16 +981,12 @@ public final class RunningRound {
         SeriesSymbols.SeriesTerms terms = SeriesSymbols.parse(symbol)
                 .orElseThrow(() -> new IllegalArgumentException("not a listed series: " + symbol));
         double spot = engines.get(terms.underlying()).lastPrice();
-        if (terms.kind() == SeriesSymbols.SeriesKind.FUTURE) {
-            return SeriesMarks.futuresReference(spot);
-        }
         double volatility = universe.find(terms.underlying())
                 .map(Instrument::baseVolatility)
                 .orElse(0.4);
-        if (terms.kind() == SeriesSymbols.SeriesKind.CALL) {
-            return OptionPricing.call(spot, terms.strike(), yearsLeft, volatility);
-        }
-        return OptionPricing.put(spot, terms.strike(), yearsLeft, volatility);
+        return com.virtualinvestor.core.pricing.SeriesMarks
+                .seriesReference(terms, spot, yearsLeft, volatility)
+                .orElse(Double.NaN);
     }
 
     public Map<String, List<Bar>> history() {

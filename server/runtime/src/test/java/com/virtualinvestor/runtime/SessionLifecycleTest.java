@@ -35,8 +35,11 @@ class SessionLifecycleTest {
         round.start();
 
         assertEquals(RoundState.RUNNING, round.state());
-        assertEquals(21, round.history().size());
+        assertEquals(21 + com.virtualinvestor.core.instrument.SeriesLister
+                .list(com.virtualinvestor.core.instrument.InstrumentUniverse.defaultUniverse()).size(),
+                round.history().size(), "spots plus every listed series");
         assertEquals(60, round.history().get("NVDO").size());
+        assertEquals(60, round.history().get("NVDO-F").size());
         assertTrue(round.engines().get("NVDO").book().orderCount() > 0);
     }
 

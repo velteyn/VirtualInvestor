@@ -8,6 +8,7 @@ import {
   isSeries,
   sectionOf,
   strikeOf,
+  underlyingOf,
 } from './positions-view';
 import type { LivePosition } from '../adapters/tradeFeed';
 
@@ -127,5 +128,15 @@ describe('holdingSection', () => {
     expect(html).toContain('25.00 + 0.00');
     expect(html).toContain('$125');
     expect(html).toContain('Strike');
+  });
+});
+
+describe('underlyingOf', () => {
+  it('resolves series to spot and spots to null', () => {
+    expect(underlyingOf('NVDO-F')).toBe('NVDO');
+    expect(underlyingOf('NVDO-C640')).toBe('NVDO');
+    expect(underlyingOf('NVDO-P640.5')).toBe('NVDO');
+    expect(underlyingOf('NVDO')).toBeNull();
+    expect(underlyingOf('nope')).toBeNull();
   });
 });

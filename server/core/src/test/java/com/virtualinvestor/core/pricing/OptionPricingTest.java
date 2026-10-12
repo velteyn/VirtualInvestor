@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.virtualinvestor.core.instrument.SeriesSymbols;
 import java.util.OptionalDouble;
 import org.junit.jupiter.api.Test;
 
@@ -55,5 +56,20 @@ class OptionPricingTest {
     void optionMarkFallsBackToFormula() {
         assertEquals(12.5, SeriesMarks.optionMark(OptionalDouble.of(12.5), 11.0), TOLERANCE);
         assertEquals(11.0, SeriesMarks.optionMark(OptionalDouble.empty(), 11.0), TOLERANCE);
+    }
+
+    @Test
+    void seriesReferenceSkipsUnusableSpots() {
+        var future = SeriesSymbols.parse("NVDO-F").orElseThrow();
+        var call = SeriesSymbols.parse("NVDO-C640").orElseThrow();
+
+        assertEquals(640.0, SeriesMarks.seriesReference(future, 640.0, 0.002, 0.45).orElseThrow(), TOLERANCE);
+        assertTrue(SeriesMarks.seriesReference(future, 0.0, 0.002, 0.45).isEmpty());
+        assertTrue(SeriesMarks.seriesReference(future, -5.0, 0.002, 0.45).isEmpty());
+        assertTrue(SeriesMarks.seriesReference(call, Double.NaN, 0.002, 0.45).isEmpty());
+        assertTrue(SeriesMarks.seriesReference(call, 640.0, -0.1, 0.45).isEmpty());
+
+        double premium = SeriesMarks.seriesReference(call, 640.0, 0.002, 0.45).orElseThrow();
+        assertTrue(premium > 0.0);
     }
 }

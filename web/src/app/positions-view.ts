@@ -195,3 +195,5 @@ function underlyingOf(symbol: string): string | null {
   const match = SERIES_PATTERN.exec(symbol);
   return match === null ? null : match[1];
 }
+
+export { underlyingOf };

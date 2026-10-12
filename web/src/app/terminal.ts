@@ -5,6 +5,8 @@
  * on-chart overlays via the trade tier's `TradeController`.
  */
 import { createWidget } from 'openalgo-charts/widget';
+import { addComparison, type Bar, type ComparisonHandle } from 'openalgo-charts';
+import { underlyingOf } from './positions-view';
 import { TradeController } from 'openalgo-charts/trade';
 import type { RoundResponse, ServerClient } from '../adapters/serverClient';
 import { VirtualInvestorDataFeed } from '../adapters/dataFeed';
@@ -100,7 +102,73 @@ export function mountTerminal(
   };
   const unsubscribeTrades = tradeFeed.onChange(syncState);
 
-  // The rivals, watchlist, news and positions panels around the chart.
+  // Underlying overlay (series-chart-overlay): when the charted symbol is a
+  // series, its underlying draws as a comparison line behind it — history
+  // plus live bars, removed on symbol switch or destroy.
+  interface OverlayState {
+    symbol: string;
+    handle: ComparisonHandle | null;
+    unsub: () => void;
+    bars: Bar[];
+  }
+  let overlay: OverlayState | null = null;
+  const clearOverlay = (): void => {
+    if (overlay !== null) {
+      overlay.unsub();
+      if (overlay.handle !== null) {
+        try {
+          overlay.handle.remove();
+        } catch {
+          /* already gone with a chart teardown */
+        }
+      }
+      overlay = null;
+    }
+  };
+  const syncOverlay = (chartSymbol: string): void => {
+    clearOverlay();
+    const underlying = underlyingOf(chartSymbol);
+    if (underlying === null) {
+      return;
+    }
+    const state: OverlayState = { symbol: chartSymbol, handle: null, unsub: () => undefined, bars: [] };
+    overlay = state;
+    const ensureHandle = (): void => {
+      if (overlay !== state) {
+        return;
+      }
+      if (state.handle === null) {
+        if (state.bars.length === 0) {
+          return;
+        }
+        state.handle = addComparison(widget.chart, {
+          symbol: underlying, bars: [...state.bars], color: '#8a93a6', type: 'line',
+        });
+      } else {
+        state.handle.setBars([...state.bars]);
+      }
+    };
+    const req = { symbol: underlying, exchange: 'VNDX', interval: '5m' };
+    state.unsub = dataFeed.subscribeBars(req, (bar) => {
+      const last = state.bars[state.bars.length - 1];
+      if (last !== undefined && last.time === bar.time) {
+        state.bars[state.bars.length - 1] = bar;
+      } else {
+        state.bars.push(bar);
+      }
+      ensureHandle();
+    });
+    void dataFeed.getBars(req).then((history) => {
+      if (overlay !== state) {
+        return;
+      }
+      const firstLive = state.bars.length > 0 ? state.bars[0].time : Infinity;
+      state.bars.unshift(...history.filter((bar) => bar.time < firstLive));
+      ensureHandle();
+    }).catch(() => {
+      /* live bars still feed the overlay when history fails */
+    });
+  };
   // Clicking a watchlist row switches the chart to that symbol (always a
   // valid name, so the chart can never land on an unknown-symbol error) and
   // follows along in the company tab when it is mounted below.
@@ -108,6 +176,7 @@ export function mountTerminal(
   const panels = mountPanels(layout, client, round, tradeFeed, {
     onSelectSymbol: (symbol: string) => {
       widget.setSymbol(symbol, 'VNDX');
+      syncOverlay(symbol);
       company?.show(symbol);
     },
   });
@@ -139,6 +208,7 @@ export function mountTerminal(
     destroy() {
       stopReconnect();
       unsubscribeTrades();
+      clearOverlay();
       ticket?.destroy();
       company?.destroy();
       newswire?.destroy();

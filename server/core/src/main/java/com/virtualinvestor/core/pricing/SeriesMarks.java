@@ -39,4 +39,26 @@ public final class SeriesMarks {
         }
         return formulaPremium;
     }
+
+    /**
+     * Derived quoting reference for a series: spot for futures, formula premium
+     * for options. Empty when the spot is unusable (non-positive or non-finite),
+     * so callers skip the quote instead of throwing mid-tick.
+     */
+    public static OptionalDouble seriesReference(
+            com.virtualinvestor.core.instrument.SeriesSymbols.SeriesTerms terms,
+            double spot, double yearsLeft, double volatility) {
+        if (!Double.isFinite(spot) || spot <= 0.0) {
+            return OptionalDouble.empty();
+        }
+        if (terms.kind() == com.virtualinvestor.core.instrument.SeriesSymbols.SeriesKind.FUTURE) {
+            return OptionalDouble.of(futuresReference(spot));
+        }
+        if (!Double.isFinite(yearsLeft) || yearsLeft < 0.0
+                || !Double.isFinite(volatility) || volatility < 0.0) {
+            return OptionalDouble.empty();
+        }
+        boolean call = terms.kind() == com.virtualinvestor.core.instrument.SeriesSymbols.SeriesKind.CALL;
+        return OptionalDouble.of(OptionPricing.premium(spot, terms.strike(), yearsLeft, volatility, call));
+    }
 }

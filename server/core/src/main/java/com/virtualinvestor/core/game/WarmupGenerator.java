@@ -8,7 +8,10 @@ import com.virtualinvestor.core.engine.InstrumentEngine;
 import com.virtualinvestor.core.fundamental.FundamentalModel;
 import com.virtualinvestor.core.instrument.Instrument;
 import com.virtualinvestor.core.instrument.InstrumentUniverse;
+import com.virtualinvestor.core.instrument.SeriesLister;
+import com.virtualinvestor.core.instrument.SeriesSymbols;
 import com.virtualinvestor.core.market.Bar;
+import com.virtualinvestor.core.pricing.OptionPricing;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -83,13 +86,63 @@ public final class WarmupGenerator {
         return history;
     }
 
-    /** Rest a two-sided quote from the market maker so the book is non-empty at the open. */
-    public void seedBooks(Collection<InstrumentEngine> engines, FundamentalModel model) {
+    /**
+     * Derived warm-up history for every listed derivative series (design D1):
+     * futures copy underlying OHLC (intraday carry is zero), options map the
+     * deterministic premium formula over underlying OHLC with high/low inverted
+     * for puts. Volumes are zero — no activity is invented. A pure function of
+     * its inputs: no RNG, so replays reproduce it exactly.
+     */
+    public static Map<String, List<Bar>> seriesHistory(
+            InstrumentUniverse universe, Map<String, List<Bar>> spotHistory, double yearsToBell) {
+        Objects.requireNonNull(universe, "universe");
+        Objects.requireNonNull(spotHistory, "spotHistory");
+        if (!Double.isFinite(yearsToBell) || yearsToBell < 0.0) {
+            throw new IllegalArgumentException("yearsToBell must be finite and non-negative");
+        }
+        Map<String, List<Bar>> derived = new LinkedHashMap<>();
+        for (Instrument series : SeriesLister.list(universe)) {
+            SeriesSymbols.SeriesTerms terms = SeriesSymbols.parse(series.ticker()).orElseThrow();
+            Instrument underlying = universe.find(terms.underlying()).orElseThrow();
+            List<Bar> source = spotHistory.get(terms.underlying());
+            if (source == null) {
+                continue;
+            }
+            List<Bar> bars = new ArrayList<>(source.size());
+            for (Bar bar : source) {
+                bars.add(seriesBar(series, terms, underlying, bar, yearsToBell));
+            }
+            derived.put(series.ticker(), List.copyOf(bars));
+        }
+        return derived;
+    }
+
+    private static Bar seriesBar(Instrument series, SeriesSymbols.SeriesTerms terms, Instrument underlying,
+            Bar bar, double yearsToBell) {
+        double tick = series.tickSize();
+        if (terms.kind() == SeriesSymbols.SeriesKind.FUTURE) {
+            return new Bar(bar.timeSec(), snap(bar.open(), tick), snap(bar.high(), tick), snap(bar.low(), tick),
+                    snap(bar.close(), tick), 0L);
+        }
+        double vol = underlying.baseVolatility();
+        boolean call = terms.kind() == SeriesSymbols.SeriesKind.CALL;
+        double open = OptionPricing.premium(bar.open(), terms.strike(), yearsToBell, vol, call);
+        double high = OptionPricing.premium(bar.high(), terms.strike(), yearsToBell, vol, call);
+        double low = OptionPricing.premium(bar.low(), terms.strike(), yearsToBell, vol, call);
+        double close = OptionPricing.premium(bar.close(), terms.strike(), yearsToBell, vol, call);
+        if (call) {
+            return new Bar(bar.timeSec(), open, Math.max(high, Math.max(open, close)),
+                    Math.min(low, Math.min(open, close)), close, 0L);
+        }
+        return new Bar(bar.timeSec(), open, Math.max(low, Math.max(open, close)),
+                Math.min(high, Math.min(open, close)), close, 0L);
+    }
+
+    /** Rest a two-sided quote from the market maker so the book is non-empty at the open. */    public void seedBooks(Collection<InstrumentEngine> engines, FundamentalModel model) {
         seedBooks(engines, model, "MARK");
     }
 
-    /** As above, but the resting quotes belong to the given participant (so fills credit it). */
-    public void seedBooks(Collection<InstrumentEngine> engines, FundamentalModel model, String participantId) {
+    /** As above, but the resting quotes belong to the given participant (so fills credit it). */    public void seedBooks(Collection<InstrumentEngine> engines, FundamentalModel model, String participantId) {
         for (InstrumentEngine engine : engines) {
             double fundamental = model.fundamental(engine.symbol());
             Quote quote = maker.quote(fundamental, 0.0, 0L);

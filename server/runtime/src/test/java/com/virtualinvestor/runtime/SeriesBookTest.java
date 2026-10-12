@@ -77,4 +77,14 @@ class SeriesBookTest {
                 && rejected.orderId().equals("s5")
                 && rejected.event() == OrderEventKind.REJECTED));
     }
+
+    @Test
+    void seriesChartsOpenWithWarmupHistory() {
+        RunningRound round = continuousRound(34L);
+
+        assertEquals(60, round.history().get("NVDO-F").size());
+        assertEquals(60, round.history().get("NVDO").size());
+        assertTrue(round.history().containsKey("NVDO-C640"));
+        assertTrue(round.history().get("NVDO-C640").stream().allMatch(bar -> bar.volume() == 0L));
+    }
 }

@@ -30,7 +30,16 @@ public final class LlamaCppNarrator implements Narrator {
     /** Advice phrasing that must never reach players. */
     static final List<String> DENY_ADVICE = List.of(
             "you should buy", "you should sell", "buy now", "sell now",
-            "strong buy", "strong sell", "recommend buying", "recommend selling");
+            "strong buy", "strong sell", "recommend buying", "recommend selling",
+            "past performance", "seek professional", "due diligence",
+            "never invest more than you can afford", "not financial advice",
+            "careful consideration and research");
+
+    /** Invented figures: the model is never given numbers, so any price-like
+     * figure in the body is fabricated. Template bodies never pass through here. */
+    static final java.util.regex.Pattern DENY_FIGURES =
+            java.util.regex.Pattern.compile("\\$\\s*\\d|\\d\\s*(%|percent(ages)?)",
+                    java.util.regex.Pattern.CASE_INSENSITIVE);
 
     private final URI endpoint;
     private final Duration timeout;
@@ -79,8 +88,12 @@ public final class LlamaCppNarrator implements Narrator {
     static String promptFor(Request request) {
         String subjects = request.subjectNames().isEmpty() ? "the broad market"
                 : String.join(", ", request.subjectNames());
-        return "Write a news story of at most 120 words, 3 to 5 sentences, for a fictional stock-market game. "
-                + "Never repeat a sentence. Never invent dollar amounts, prices, percentages, or deal values. "
+        return "You are an economic journalist covering a fictional stock market. "
+                + "Describe the financial situation in these facts in 3 to 5 vivid sentences, "
+                + "at most 120 words, using ONLY what is given. "
+                + "Never invent prices, percentages, dollar amounts, or deal values. "
+                + "Never add disclaimers, investment advice, warnings, or moral judgments. "
+                + "End with the situation, nothing else. "
                 + "Facts. Headline: " + request.headline() + ". Subjects: " + subjects + ". "
                 + (request.sector() == null || request.sector().isBlank() ? ""
                         : "Sector: " + request.sector() + ". ")
@@ -144,7 +157,7 @@ public final class LlamaCppNarrator implements Narrator {
         return sentence.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", " ").trim();
     }
 
-    /** True when the body names reality or advises the reader: drop it. */
+    /** True when the body names reality, advises the reader, preaches, or invents figures: drop it. */
     static boolean denied(String body) {
         String lower = body.toLowerCase(Locale.ROOT);
         for (String name : DENY_NAMES) {
@@ -157,7 +170,7 @@ public final class LlamaCppNarrator implements Narrator {
                 return true;
             }
         }
-        return false;
+        return DENY_FIGURES.matcher(body).find();
     }
 
     /** Pull {@code content} out of a /completion JSON object (minimal scanner, no deps). */

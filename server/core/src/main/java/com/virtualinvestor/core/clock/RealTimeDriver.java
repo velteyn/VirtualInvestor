@@ -42,7 +42,17 @@ public final class RealTimeDriver implements AutoCloseable {
             return;
         }
         clock.start();
-        task = scheduler.scheduleAtFixedRate(tick, 0L, clock.stepMillis(), TimeUnit.MILLISECONDS);
+        // A throwing tick would silently cancel all future executions
+        // (ScheduledExecutorService semantics), freezing the round with no log.
+        // Catch, log, and continue so one bad tick can never kill the world.
+        task = scheduler.scheduleAtFixedRate(() -> {
+            try {
+                tick.run();
+            } catch (Throwable failure) {
+                java.util.logging.Logger.getLogger(RealTimeDriver.class.getName())
+                        .log(java.util.logging.Level.SEVERE, "world tick failed, continuing", failure);
+            }
+        }, 0L, clock.stepMillis(), TimeUnit.MILLISECONDS);
     }
 
     /** Pause the clock while keeping the driver alive. */
