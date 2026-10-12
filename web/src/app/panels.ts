@@ -1,8 +1,9 @@
 /**
- * The terminal's surrounding panels: rivals leaderboard, watchlist, news wire and the positions
- * strip. On a wide screen they stack in a right-hand column; on a narrow (phone) screen the
- * column collapses below the chart and each panel is a full-width card. Layout is driven by CSS
- * (`vi-layout`), so the same markup works on desktop and mobile.
+ * The terminal's surrounding panels: rivals leaderboard, watchlist and the positions
+ * strip. On a wide screen rivals and watchlist stack in a full-height right sidebar
+ * with the ticket; the news wire lives in the dock tabs. On a narrow (phone) screen
+ * everything collapses below the chart as full-width cards. Layout is driven by CSS,
+ * so the same markup works on desktop and mobile.
  */
 import type { LeaderboardEntry, RoundResponse, ServerClient, WirePayload } from '../adapters/serverClient';
 import type { VirtualInvestorTradeFeed } from '../adapters/tradeFeed';
@@ -30,8 +31,7 @@ export function mountPanels(
   column.className = 'vi-column';
   column.innerHTML = `
     <section class="vi-panel vi-rivals"><h2>Rivals</h2><ol class="vi-rows"></ol></section>
-    <section class="vi-panel vi-watchlist"><h2>Watchlist</h2><ul class="vi-rows"></ul></section>
-    <section class="vi-panel vi-newsfeed"><h2>News</h2><ul class="vi-rows"></ul></section>`;
+    <section class="vi-panel vi-watchlist"><h2>Watchlist</h2><ul class="vi-rows"></ul></section>`;
   root.appendChild(column);
 
   const strip = document.createElement('section');
@@ -42,7 +42,6 @@ export function mountPanels(
 
   const rivalsRows = column.querySelector('.vi-rivals .vi-rows') as HTMLElement;
   const watchRows = column.querySelector('.vi-watchlist .vi-rows') as HTMLElement;
-  const newsRows = column.querySelector('.vi-newsfeed .vi-rows') as HTMLElement;
   const posRows = strip.querySelector('.vi-pos-rows') as HTMLElement;
   const accountLine = strip.querySelector('.vi-account') as HTMLElement;
 
@@ -93,59 +92,6 @@ export function mountPanels(
     }
   }));
 
-  // ── news ───────────────────────────────────────────────────────────────
-  // Headlines carry release tick + validity; the newest round tick (seen on
-  // trade frames) flips expired items to "priced in" (news-validity 3.1).
-  // Expired news stays readable — bots ignore it, humans still learn from it.
-  interface NewsRow {
-    newsId: string;
-    badge: string;
-    headline: string;
-    releaseTick: number;
-    validityTicks: number;
-    hasStory: boolean;
-  }
-  const news: NewsRow[] = [];
-  let newestTick = 0;
-  const renderNews = (): void => {
-    newsRows.innerHTML = news.map((row) => {
-      const pricedIn = row.validityTicks > 0 && newestTick > row.releaseTick + row.validityTicks;
-      const badge = `${row.badge}${row.hasStory ? ' · full story' : ''}${pricedIn ? ' · priced in' : ''}`;
-      return `<li><div class="vi-news-meta">${escape(badge)}</div><div>${escape(row.headline)}</div></li>`;
-    }).join('');
-  };
-  unsubscribers.push(client.onPayload((payload: WirePayload) => {
-    if (payload.type === 'trade') {
-      const tick = Number(payload.tick);
-      if (Number.isFinite(tick) && tick > newestTick) {
-        newestTick = tick;
-        renderNews();
-      }
-      return;
-    }
-    if (payload.type !== 'news') {
-      return;
-    }
-    const releaseTick = Number(payload.tick);
-    const validityTicks = Number(payload.durationTicks);
-    // Same-newsId re-broadcasts (newsroom-narrator 2.3: the article body
-    // arrived) refresh the row in place instead of duplicating it.
-    const newsId = String(payload.newsId ?? '');
-    const at = news.findIndex((row) => row.newsId === newsId);
-    if (at >= 0) {
-      news.splice(at, 1);
-    }
-    news.unshift({
-      newsId,
-      badge: `${String(payload.source)} · ${String(payload.scope)}`,
-      headline: String(payload.headline),
-      releaseTick: Number.isFinite(releaseTick) ? releaseTick : 0,
-      validityTicks: Number.isFinite(validityTicks) ? validityTicks : 0,
-      hasStory: typeof payload.body === 'string' && payload.body.length > 80,
-    });
-    news.length = Math.min(news.length, 20);
-    renderNews();
-  }));
 
   // ── positions + account ────────────────────────────────────────────────
   const renderPositions = (): void => {

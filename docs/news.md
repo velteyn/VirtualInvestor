@@ -102,11 +102,12 @@ reserved kinds outside the selection policy.
 The sidecar is a dockerized llama.cpp server, an integral part of the
 project — no local install needed:
 
-1. Fetch the weights once (install phase, ~640 MB, gitignored):
-   `infra/narrator/fetch-model.sh`. Default is Qwen2.5-0.5B-Instruct Q8, the
-   smallest usable instruct model in the families from exploration; it writes
-   a 150-word story in ~20s on the reference i5/8GB box. (For richer prose,
-   swap `MODEL_FILE`/`MODEL_URL` to the 1.5B sibling.)
+1. Fetch the weights once (install phase, ~1.9 GB, gitignored):
+   `infra/narrator/fetch-model.sh`. Default is Qwen2.5-3B-Instruct Q4_K_M,
+   which writes a 150-word story inside the 60s/article budget on the
+   reference i5/8GB box. (The 0.5B sibling looped repetitively and was
+   retired; for richer prose, swap `MODEL_FILE`/`MODEL_URL` to a larger
+   sibling.)
 2. `docker compose --profile narrator up -d` from `infra/` (the entrypoint
    refetches if the weights are missing). The server listens on
    `127.0.0.1:18080` — localhost only, like the db. Container port is 8081,

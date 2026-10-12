@@ -3,13 +3,13 @@
 # then serve them. MODEL_URL/MODEL_FILE/MODEL_DIR mirror fetch-model.sh.
 set -eu
 
-MODEL_FILE="${MODEL_FILE:-qwen2.5-0.5b-instruct-q8_0.gguf}"
+MODEL_FILE="${MODEL_FILE:-qwen2.5-3b-instruct-q4_k_m.gguf}"
 MODEL_DIR="${MODEL_DIR:-/models}"
 export MODEL_DIR MODEL_FILE
-export MODEL_URL="${MODEL_URL:-https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q8_0.gguf}"
+export MODEL_URL="${MODEL_URL:-https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf}"
 
 if [ ! -s "$MODEL_DIR/$MODEL_FILE" ]; then
-    echo "weights missing, fetching (one-time, ~640 MB) ..." >&2
+    echo "weights missing, fetching (one-time, ~1.9 GB) ..." >&2
     /fetch-model.sh
 fi
 # Container port 8081, not 8080: some hosts filter outbound traffic to

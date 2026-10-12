@@ -75,7 +75,7 @@ Open `http://localhost:5173/`.
 **4. Newsroom sidecar** (optional — headlines gain LLM-written stories):
 
 ```bash
-cd infra && ./narrator/fetch-model.sh   # one-time weights download (~640 MB)
+cd infra && ./narrator/fetch-model.sh   # one-time weights download (~1.9 GB)
 docker compose --profile narrator up -d narrator
 ```
 

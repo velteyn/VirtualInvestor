@@ -91,6 +91,36 @@ class LlamaCppNarratorTest {
     }
 
     @Test
+    void dedupeCollapsesNearDuplicates() {
+        String looped = "The market is a surreal place. The market is a surreal place! "
+                + "New customers arrive daily.";
+
+        assertEquals("The market is a surreal place. New customers arrive daily.",
+                LlamaCppNarrator.dedupeSentences(looped));
+    }
+
+    @Test
+    void degenerateLoopDeclines() throws Exception {
+        HttpServer server = stub("{\"content\":\"The market is a surreal place. "
+                + "The market is a surreal place. The market is a surreal place.\", \"stop\":true}");
+        try {
+            Narrator narrator = new LlamaCppNarrator(
+                    URI.create("http://127.0.0.1:" + server.getAddress().getPort()),
+                    Duration.ofSeconds(5), "llama-test");
+
+            assertTrue(narrator.narrate(earnings()).isEmpty());
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void healthyBodyPassesDegeneracyCheck() {
+        assertTrue(!LlamaCppNarrator.isDegenerate("Pear beat the street. Services carried the quarter."));
+        assertTrue(LlamaCppNarrator.isDegenerate("The market is a surreal place. The market is a surreal place."));
+    }
+
+    @Test
     void malformedJsonDeclines() throws Exception {
         HttpServer server = stub("not json at all");
         try {

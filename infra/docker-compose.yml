@@ -23,7 +23,7 @@ services:
       retries: 10
 
   # Newsroom sidecar (newsroom-narrator): dockerized llama.cpp serving the
-  # preconfigured tiny model. Opt-in via profile so a stock checkout behaves
+  # preconfigured instruct model (Qwen2.5-3B Q4_K_M). Opt-in via profile so a stock checkout behaves
   # exactly as before: `docker compose --profile narrator up -d`. The edge
   # reaches it at VI_NARRATOR_URL (default http://127.0.0.1:18080) with
   # VI_NARRATOR=llama; anything else keeps templates or bare headlines.
@@ -42,7 +42,7 @@ services:
       - ./narrator/fetch-model.sh:/fetch-model.sh:ro
       - ./narrator/entrypoint.sh:/entrypoint.sh:ro
     environment:
-      MODEL_FILE: qwen2.5-0.5b-instruct-q8_0.gguf
+      MODEL_FILE: qwen2.5-3b-instruct-q4_k_m.gguf
     entrypoint: ["/bin/sh", "/entrypoint.sh"]
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8081/health > /dev/null"]

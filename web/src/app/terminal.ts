@@ -15,6 +15,7 @@ import { mountPortfolio } from './portfolio';
 import { mountTicket } from './ticket';
 import { mountCompany, type Company } from './company';
 import { mountNewsroom } from './newsroom';
+import { mountNewsWire } from './newswire';
 
 export interface Terminal {
   destroy(): void;
@@ -129,6 +130,7 @@ export function mountTerminal(
   const portfolio = strip === null ? null : mountPortfolio(strip, client, round, participant, tradeFeed);
   company = strip === null || portfolio === null ? null : mountCompany(strip);
   const newsroom = strip === null || portfolio === null ? null : mountNewsroom(strip, client, round);
+  const newswire = strip === null || portfolio === null ? null : mountNewsWire(strip, client);
 
   // A small session banner (kept out of the way on narrow screens).
   const banner = document.createElement('div');
@@ -143,6 +145,7 @@ export function mountTerminal(
       ticket?.destroy();
       company?.destroy();
       newsroom?.destroy();
+      newswire?.destroy();
       portfolio?.destroy();
       panels.destroy();
       widget.destroy();

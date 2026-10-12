@@ -31,7 +31,7 @@ public class NarratorConfig {
                     java.net.URI.create(System.getenv().getOrDefault("VI_NARRATOR_URL", "http://127.0.0.1:18080")),
                     java.time.Duration.ofMillis(Long.parseLong(
                             System.getenv().getOrDefault("VI_NARRATOR_TIMEOUT_MS", "60000"))),
-                    System.getenv().getOrDefault("VI_NARRATOR_MODEL", "qwen2.5-0.5b-q8"));
+                    System.getenv().getOrDefault("VI_NARRATOR_MODEL", "qwen2.5-3b-q4_k_m"));
             default -> {
                 if (!mode.equals("template")) {
                     log.warn("unknown narrator mode '{}'; using templates", mode);

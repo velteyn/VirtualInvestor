@@ -66,7 +66,7 @@ public final class LlamaCppNarrator implements Narrator {
             String body = extractContent(response.body()).map(String::trim).filter(s -> !s.isEmpty())
                     .map(LlamaCppNarrator::dedupeSentences).filter(s -> !s.isEmpty())
                     .orElse(null);
-            if (body == null || denied(body)) {
+            if (body == null || denied(body) || isDegenerate(body)) {
                 return Optional.empty();
             }
             return Optional.of(new Draft(body, model));
@@ -90,7 +90,8 @@ public final class LlamaCppNarrator implements Narrator {
 
     /**
      * Drop exact-duplicate sentences (small models loop): first occurrence wins,
-     * order preserved. A single sentence is returned untouched.
+     * order preserved. Near-duplicates differing only in punctuation or spacing
+     * collapse too. A single sentence is returned untouched.
      */
     static String dedupeSentences(String body) {
         String[] parts = body.split("(?<=\\.\\s)|(?<=!\\s)|(?<=\\?\\s)");
@@ -101,8 +102,7 @@ public final class LlamaCppNarrator implements Narrator {
             if (sentence.isEmpty()) {
                 continue;
             }
-            String key = sentence.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
-            if (seen.add(key)) {
+            if (seen.add(normalize(sentence))) {
                 if (out.length() > 0) {
                     out.append(' ');
                 }
@@ -110,6 +110,38 @@ public final class LlamaCppNarrator implements Narrator {
             }
         }
         return out.toString();
+    }
+
+    /**
+     * True when the body is a degenerate loop even after dedupe: fewer than two
+     * distinct sentences, or one sentence dominating. Declining lets the
+     * degradation ladder fall back to the bare headline instead of printing mush.
+     */
+    static boolean isDegenerate(String body) {
+        String[] parts = body.split("(?<=\\.\\s)|(?<=!\\s)|(?<=\\?\\s)");
+        java.util.Map<String, Integer> counts = new java.util.LinkedHashMap<>();
+        int total = 0;
+        for (String part : parts) {
+            String sentence = part.trim();
+            if (sentence.isEmpty()) {
+                continue;
+            }
+            counts.merge(normalize(sentence), 1, Integer::sum);
+            total++;
+        }
+        if (total >= 2 && counts.size() < 2) {
+            return true;
+        }
+        for (int count : counts.values()) {
+            if (total > 0 && (double) count / total > 0.6) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String normalize(String sentence) {
+        return sentence.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", " ").trim();
     }
 
     /** True when the body names reality or advises the reader: drop it. */

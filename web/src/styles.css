@@ -95,14 +95,15 @@ body,
 }
 
 /* ── terminal: responsive grid ───────────────────────────────────────── */
-/* Wide screens: chart on the left, a right column of panels, a positions strip at the bottom. */
+/* Wide screens: chart + tabbed dock on the left, a full-height sidebar
+   (rivals, watchlist, ticket) on the right down to the footer. */
 .vi-terminal {
   display: grid;
   grid-template-columns: 1fr 320px;
   grid-template-rows: 1fr auto;
   grid-template-areas:
-    "chart column"
-    "positions positions";
+    "chart sidebar"
+    "dock sidebar";
   height: 100%;
   min-height: 0;
 }
@@ -115,18 +116,33 @@ body,
 }
 
 .vi-column {
-  grid-area: column;
+  grid-area: sidebar;
   display: flex;
   flex-direction: column;
   gap: 1px;
   background: #0a0b0f;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.vi-column .vi-rivals,
+.vi-column .vi-watchlist {
+  flex: 0 0 auto;
+}
+
+.vi-column .vi-ticket {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
 }
 
 .vi-dock {
-  grid-area: positions;
+  grid-area: dock;
   background: #101218;
   border-top: 1px solid #232838;
+  min-height: 0;
+  max-height: 42vh;
+  overflow-y: auto;
 }
 
 .vi-positions {
@@ -424,19 +440,24 @@ body,
   opacity: 0.55;
 }
 
-/* Phone / narrow: single column — chart, then panels, then positions. */
+/* Phone / narrow: single column — chart, then sidebar, then dock. */
 @media (max-width: 640px) {
   .vi-terminal {
     grid-template-columns: 1fr;
     grid-template-areas:
       "chart"
-      "column"
-      "positions";
+      "sidebar"
+      "dock";
     grid-template-rows: 55vh auto auto;
     overflow-y: auto;
   }
 
   .vi-column {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .vi-dock {
     max-height: none;
   }
 }
