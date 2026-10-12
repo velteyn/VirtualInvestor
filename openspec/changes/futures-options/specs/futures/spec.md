@@ -31,12 +31,20 @@ per contract, and expiry fixed at the round's closing bell.
 The system SHALL lock the initial margin in cash when a futures position is
 opened, SHALL release it as the position closes, and SHALL treat equity net of
 locked margin against the maintenance requirement on realism presets that
-enable margin.
+enable margin. The default initial margin SHALL be 20% of notional value
+(5x leverage, per the WST 2001 tutorial canon) and SHALL be configurable per
+series in launch config.
 
 #### Scenario: Opening locks margin
 
 - **WHEN** a participant opens 2 contracts with an initial margin of 500 each
 - **THEN** 1000 of cash is locked and buying power falls by the same amount
+
+#### Scenario: Default margin is twenty percent
+
+- **WHEN** a series lists no explicit initial margin
+- **THEN** the initial margin equals 20% of the contract notional at reference
+  price
 
 #### Scenario: Closing releases margin
 

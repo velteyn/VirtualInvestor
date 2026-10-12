@@ -43,7 +43,7 @@ strikes; index gets futures, not options in v1) — none changes the build.
 - [ ] 4.1 Extend OrderValidator with series existence, expiry, series grids,
   and halted-underlying reasons, and verify each reason in
   `OrderValidatorDerivativesTest`.
-- [ ] 4.2 Add per-contract futures/options commissions and ticket minima to
+- [ ] 4.2 Add percentage-of-notional futures/options commissions and ticket minima to
   bank schedules with the deterministic deduction rule, and verify replay
   identity in `BrokerageDerivativesTest`.
 - [ ] 4.3 Emit expiry/exercise close events (FuturesSettled, OptionSettled with

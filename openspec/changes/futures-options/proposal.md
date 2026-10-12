@@ -35,7 +35,9 @@ as later changes in the same arc.
   options auto-exercise-or-expire cash-settled; forced close of anything left, per
   existing settlement behavior extended to derivatives.
 - **What is NOT in scope**: bank loans / cross-round leverage, American exercise,
-  multi-expiry chains, Greeks display beyond premium, rival-bot derivatives
+  multi-expiry chains (the original offered selectable expiries and strikes —
+  v1 fixes one expiry at the bell with a small strike set; multi-expiry is an
+  explicit follow-up), Greeks display beyond premium, rival-bot derivatives
   strategies (bots keep identical rules and may simply not trade the new books),
   real company names (fictional universe only, per `market-simulation`).
 

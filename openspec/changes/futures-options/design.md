@@ -27,8 +27,11 @@ new order types; premia and settlement stay pure functions of (seed, log,
 underlying state) so replays stay exact; every new number is explainable in
 the terminal (the WST lesson — see `docs/wst2001-inspiration.md`).
 
-**Non-Goals:** no American exercise, no multi-expiry chains, no Greeks display,
-no overnight carry, no rival-bot derivatives strategies, no real-company names.
+**Non-Goals:** no American exercise, no multi-expiry chains in v1 (the disc
+shows the original had selectable expiries and strikes; v1 fixes one expiry at
+the bell — multi-expiry is an explicit follow-up change, not scope creep here),
+no Greeks display, no overnight carry, no rival-bot derivatives strategies, no
+real-company names.
 
 ## Decisions
 
@@ -85,7 +88,8 @@ participant model already permits.
 - *Options:* premium settlement maps exactly onto `applyFill` (buyer BUY moves
   cash `-premium`, seller SELL moves `+premium`; avgPrice = premium; realized
   on reduce/flip). No new cash path needed.
-- *Futures:* new path — entry locks `initialMargin` per contract into a new
+- *Futures:* new path — entry locks `initialMargin` per contract (default 20%
+  of notional, configurable, per WST canon) into a new
   `lockedMargin` field (no notional cash exchange), position tracks entry
   price, MTM flows through `unrealized()` off the series mark. `equity()` and
   `buyingPower()` become `cash + derivatives value` and `cash - lockedMargin`

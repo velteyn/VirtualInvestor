@@ -3,9 +3,79 @@
 Research reference for the derivatives/leverage arc. Written Oct 2026 from
 secondary sources because **no official WST 2001 manual PDF is publicly
 archived** (checked archive.org, oldgamesdownload, MobyGames, PC Gamer scans,
-GameFAQs). Nothing below quotes the manual; it reconstructs mechanics from the
-MYTH NFO files, MobyGames entries, the GameSpot review of WST 2000, and
-retro-replay/vgtimes summaries.
+GameFAQs). **Updated with primary-source extracts from the game disc itself**
+(`WST2001.iso` from the user's archive): the full in-game tutorial script
+(`INSTALL/TUTO.SRC`), all help bubbles (`INSTALL/HELPBUB.SRC`), and the tips
+file (`INSTALL/TIPS.SRC`). No manual file ships on the disc — the readme says
+*"Ce fichier contient des informations qui ne se trouvent pas dans le manuel"*,
+confirming a printed manual existed separately.
+
+## Primary-source mechanics (verbatim from the disc)
+
+### Futures: 20% margin, broker auto-settles
+
+- *"Quand vous achetez un future... vous n'avez à payer que 20 % maintenant...
+  C'est ce qu'on appelle un effet de levier."* → **5x leverage**, hardcoded 20%.
+- *"Quand les futures arrivent à échéance... votre broker le fait
+  automatiquement pour vous."* → auto-settlement at expiry, exactly our
+  settlement design (D6).
+
+### Options: ~10% premium, selectable strike AND expiry
+
+- *"l'option ne représente en général que 10% du prix de l'action... l'effet
+  de levier pour les options est environ deux fois plus important que
+  [futures]"* → **~10x leverage for long options**.
+- Help bubbles: *"Appuyez ici pour fixer l'échéance"* and *"fixer le prix
+  d'exercice"* → the original had **selectable expiries and strikes**, not our
+  one-expiry simplification. Keep single-expiry for v1; multi-expiry is a
+  named follow-up.
+- *"si vous vendez une option d'achat ou de vente, vous ne pouvez revenir sur
+  votre décision, les risques sont donc élevés"* → **short options are binding**,
+  reinforcing our always-margin-covered-shorts rule.
+- Tips file: *"L'emploi d'options et de future est essentiel pour gagner.
+  Utilisez un délai court pour réinvestir les bénéfices."* → short expiries as
+  the core loop; supports intraday-only scope.
+
+### Fees: percentage + minimum (matches our brokerage spec)
+
+- *"Voici le montant que vous payez pour chaque opération, sous forme de
+  pourcentage de la transaction totale"* + *"Voici le montant minimum... Si la
+  commission n'excède pas le coût minimum, vous payez uniquement cette
+  commission forfaitaire."* → `max(minimum, rate x notional)`, same shape as
+  `brokerage`, except percentage-based rather than per-share. Consider
+  percentage commissions for derivatives books.
+
+### No bank loans: "la banque" is the team HQ
+
+- The tutorial's bank visit covers only hiring/managing employees; the PDA's
+  cash/net-worth display lives on the trading screen, and no tutorial, tip, or
+  help bubble mentions borrowing, interest, or debt. **The loan memory is not
+  from this game** — the arc's margin feature should be designed as our own
+  invention (or dropped), not as WST canon.
+
+### Crew details beyond the NFO summary
+
+- Brokers have happiness/stress/health; sad brokers are less efficient and may
+  quit; fixed with gifts, raises, insurance. Prestige + honesty affect
+  well-being; candidates state honesty/well-being expectations on their CVs.
+- Analyst also raises the player's finance skill and writes performance
+  reports (*"...vous aidera à comprendre, si nécessaire, où vous avez
+  échoué"* — a proto-AI-Coach).
+- Guru effect: exact predictions raise prestige, and prestige makes future
+  predictions move prices more — a feedback loop.
+- Spy needs the press agent to spread rumors; using a spy means hiring a
+  lawyer. Rumor pub patrons are unreliable vs the analyst.
+- Stakes screen: ownership share → board votes → decisions that move the
+  price (takeover angle, out of scope for derivatives).
+
+### Interface details worth stealing
+
+- PDA shows date, cash, net worth; tabs for shares/futures/calls/puts, owned
+  vs in-process orders; volume gauges as % of wealth; total cost preview.
+- NewsCenter has a pause clock for reading news in real-time games.
+- Mouse wheel scrolls PDA lists; advanced order types exist but are
+  manual-only (*"Les ordres avancés sont expliqués dans le manuel du jeu"*).
+- Phone to chat with other players (multiplayer lobby feature).
 
 ## The game
 
@@ -107,8 +177,9 @@ terminal — no inscrutable moves.
 ## Arc order
 
 Long-run goal is all of them, one change at a time. Chosen order: **(B)
-futures + options first** (change `futures-options`), then bank-loan margin,
-then crew. Rationale: derivatives reuse the existing book/journal/replay core;
+futures + options first** (change `futures-options`), then an original
+margin feature (no WST canon — see "No bank loans" above), then crew.
+Rationale: derivatives reuse the existing book/journal/replay core;
 margin changes `participant-risk-limits` loss bounds and deserves its own
 deliberate scope; crew is mostly presentation + news plumbing and is cheapest
 last.
