@@ -76,7 +76,7 @@ final class BotRunner {
         return Math.min(quadratic, cap);
     }
 
-    private final List<String> restingQuoteIds = new ArrayList<>();
+    private final Map<String, List<String>> restingQuoteIds = new LinkedHashMap<>();
     private long sequence;
     private boolean stopped;
 
@@ -159,6 +159,24 @@ final class BotRunner {
         return take(engine, fundamental, volatility, priceChange, netPosition, tick, equity, news, onFill);
     }
 
+    /**
+     * Maker-only quoting for a derivative series around a derived reference (spot for
+     * futures, formula premium for options). Takers never touch series books, so rival
+     * strategies stay equities-only while institutions supply series liquidity.
+     */
+    List<GameEvent> quoteSeries(
+            InstrumentEngine engine, double reference, long netPosition, long tick, double equity,
+            Consumer<Fill> onFill) {
+        if (stopped || maker == null) {
+            return List.of();
+        }
+        Quote quote = maker.quote(reference, 0.0, netPosition, 0.0);
+        if (!rungDue(quote, tick)) {
+            return List.of();
+        }
+        return refreshQuote(engine, quote, reference, netPosition, tick, equity, onFill);
+    }
+
     /** Whether any ladder rung's session-relative wave lands on this tick. */
     private boolean rungDue(Quote quote, long tick) {
         int levels = Math.max(quote.bidLevels().size(), quote.askLevels().size());
@@ -201,6 +219,10 @@ final class BotRunner {
                     Math.round(rung.size() * size / (double) maker.baseSize())));
         }
 
+        // Resting quotes are tracked per book: one runner quotes many symbols now,
+        // and ladders must diff against their own book's state, never another's.
+        List<String> restingQuoteIds =
+                this.restingQuoteIds.computeIfAbsent(symbol, ignored -> new ArrayList<>());
         // Rebuild wholesale when the ladder shape itself changed; otherwise diff
         // slot by slot and leave untouched levels resting (realistic-liquidity 1.1).
         if (restingQuoteIds.size() != desired.size()) {

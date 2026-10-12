@@ -83,14 +83,15 @@ class RoundBroadcasterTest {
         bridge.bindEngines(List::of);
 
         bridge.publish(List.of(
-                new GameEvent.PositionUpdated("p1", "NVDO", 10L, 640.0, 25.0, 9L),
-                new GameEvent.AccountUpdated("p1", 93_600.0, 25.0, 4.0, 9L)), 1L);
+                new GameEvent.PositionUpdated("p1", "NVDO", 10L, 640.0, 25.0, 0.0, 9L),
+                new GameEvent.AccountUpdated("p1", 93_600.0, 25.0, 4.0, 500.0, 9L)), 1L);
 
         String all = String.join("\n", session.sent());
         assertTrue(all.contains("\"type\":\"position\""), all);
         assertTrue(all.contains("\"type\":\"account\""), all);
         assertTrue(all.contains("640.0"), all);
         assertTrue(all.contains("93600.0"), all);
+        assertTrue(all.contains("500.0"), all);
     }
 
     @Test

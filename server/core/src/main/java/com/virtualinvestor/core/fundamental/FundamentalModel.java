@@ -68,12 +68,12 @@ public final class FundamentalModel {
         this.idioRandom = new LinkedHashMap<>();
         this.lastReturn = new LinkedHashMap<>();
 
-        for (String sector : new LinkedHashSet<>(universe.all().stream().map(Instrument::sector).toList())) {
+        for (String sector : new LinkedHashSet<>(universe.spots().stream().map(Instrument::sector).toList())) {
             sectorRandom.put(sector, streams.stream("fundamental.sector." + sector));
             sectorFactor.put(sector, 0.0);
             sectorIncrement.put(sector, 0.0);
         }
-        for (Instrument instrument : universe.all()) {
+        for (Instrument instrument : universe.spots()) {
             idioRandom.put(instrument.ticker(), streams.stream("fundamental.idio." + instrument.ticker()));
             fundamental.put(instrument.ticker(), instrument.referencePrice());
             reference.put(instrument.ticker(), instrument.referencePrice());
@@ -136,7 +136,7 @@ public final class FundamentalModel {
             sectorFactor.merge(entry.getKey(), increment, Double::sum);
         }
 
-        for (Instrument instrument : universe.all()) {
+        for (Instrument instrument : universe.spots()) {
             String ticker = instrument.ticker();
             double multiplier = volatilityState == null ? 1.0 : volatilityState.multiplier(ticker);
             double idio = instrument.baseVolatility() * multiplier * stepFraction * idioRandom.get(ticker).nextGaussian();
@@ -199,7 +199,7 @@ public final class FundamentalModel {
                 affected.add(symbol);
             }
             case SECTOR -> {
-                for (Instrument instrument : universe.all()) {
+                for (Instrument instrument : universe.spots()) {
                     if (instrument.sector().equals(sector)) {
                         jump(instrument.ticker(), magnitude);
                         affected.add(instrument.ticker());
@@ -207,7 +207,7 @@ public final class FundamentalModel {
                 }
             }
             case MACRO -> {
-                for (Instrument instrument : universe.all()) {
+                for (Instrument instrument : universe.spots()) {
                     jump(instrument.ticker(), magnitude * instrument.marketBeta());
                     affected.add(instrument.ticker());
                 }

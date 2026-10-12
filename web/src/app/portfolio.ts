@@ -6,6 +6,7 @@
  */
 import type { FillRow, RoundResponse, ServerClient, WirePayload } from '../adapters/serverClient';
 import type { LiveOrder, LivePosition, TradeState, VirtualInvestorTradeFeed } from '../adapters/tradeFeed';
+import { SECTION_ORDER, describePosition, groupByProduct, holdingSection } from './positions-view';
 
 export interface Portfolio {
   destroy(): void;
@@ -52,11 +53,7 @@ export function mountPortfolio(
   pfView.innerHTML = `
     <div class="vi-pf-head"></div>
     <h2>Holdings <span class="vi-pf-count" id="vi-pf-npos"></span></h2>
-    <table class="vi-pf-table"><thead><tr>
-      <th>Symbol</th><th class="vi-num">Qty</th><th class="vi-num">Avg</th><th class="vi-num">Last</th>
-      <th class="vi-num">Value</th><th class="vi-num">Invested</th>
-      <th class="vi-num">Unreal $</th><th class="vi-num">Unreal %</th><th class="vi-num">Realized</th><th></th>
-    </tr></thead><tbody></tbody></table>
+    <table class="vi-pf-table"><tbody></tbody></table>
     <h2>Working orders <span class="vi-pf-count" id="vi-pf-nord"></span></h2>
     <table class="vi-pf-table"><thead><tr>
       <th>Order</th><th>Side</th><th>Type</th><th class="vi-num">Qty</th><th class="vi-num">Filled</th>
@@ -128,34 +125,28 @@ export function mountPortfolio(
     let invested = 0;
     let value = 0;
     let unreal = 0;
-    holdingsBody.innerHTML = state.positions.map((p: LivePosition) => {
-      const last = marks.get(p.symbol) ?? p.avgPrice;
-      const rowValue = p.netQty * last;
-      const rowInvested = Math.abs(p.netQty) * p.avgPrice;
-      const rowUnreal = (last - p.avgPrice) * p.netQty;
-      invested += rowInvested;
-      value += rowValue;
-      unreal += rowUnreal;
-      const pct = rowInvested === 0 ? 0 : (rowUnreal / rowInvested) * 100;
-      return `<tr><td class="vi-sym">${p.symbol}</td>
-        <td class="vi-num">${p.netQty > 0 ? '+' : ''}${p.netQty}</td>
-        <td class="vi-num">${p.avgPrice.toFixed(2)}</td><td class="vi-num">${last.toFixed(2)}</td>
-        <td class="vi-num">${int(rowValue)}</td><td class="vi-num">${int(rowInvested)}</td>
-        <td class="vi-num ${rowUnreal >= 0 ? 'vi-up' : 'vi-down'}">${money(rowUnreal)}</td>
-        <td class="vi-num ${pct >= 0 ? 'vi-up' : 'vi-down'}">${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%</td>
-        <td class="vi-num">${money(p.realized)}</td>
-        <td class="vi-act"><button data-close="${p.symbol}">Close</button></td></tr>`;
-    }).join('') || `<tr><td colspan="10" class="vi-empty">No open positions</td></tr>`;
+    for (const p of state.positions) {
+      const view = describePosition(p, marks.get(p.symbol) ?? p.avgPrice, NaN);
+      invested += view.invested;
+      value += view.value;
+      unreal += view.unreal;
+    }
+    const grouped = groupByProduct(state.positions);
+    holdingsBody.innerHTML = SECTION_ORDER
+      .map((key) => holdingSection(key, grouped.get(key) ?? [], marks))
+      .join('') || `<tr><td colspan="11" class="vi-empty">No open positions</td></tr>`;
     setCount('vi-pf-npos', state.positions.length);
 
     const cash = state.account?.cash ?? 0;
+    const locked = state.account?.lockedMargin ?? 0;
     const equity = cash + value;
     const ret = (equity / round.startingCapital - 1) * 100;
     head.innerHTML = `<div class="vi-pf-equity"><label>Equity</label>
       <b>$${int(equity)}</b>
       <span class="${ret >= 0 ? 'vi-up' : 'vi-down'}">${ret >= 0 ? '+' : ''}${ret.toFixed(1)}%</span></div>
       <div class="vi-pf-stat"><label>Cash</label><span>$${int(cash)}</span></div>
-      <div class="vi-pf-stat"><label>Buying power</label><span>$${int(cash)}</span></div>
+      <div class="vi-pf-stat"><label>Buying power</label><span>$${int(cash - locked)}</span></div>
+      <div class="vi-pf-stat"><label>Locked</label><span>$${int(locked)}</span></div>
       <div class="vi-pf-stat"><label>Unreal</label>
         <span class="${unreal >= 0 ? 'vi-up' : 'vi-down'}">${money(unreal)}</span></div>
       <div class="vi-pf-stat"><label>Realized</label><span>${money(state.account?.realizedPnl ?? 0)}</span></div>

@@ -117,7 +117,7 @@ export function mountLaunchPad(
       try {
         const banks: BankResponse[] = await client.banks();
         bank.innerHTML = banks
-          .map((entry) => `<option value="${entry.bankId}">${entry.displayName} — ${entry.feePerShare}/share, min $${entry.ticketMinimum}</option>`)
+          .map((entry) => `<option value="${entry.bankId}">${entry.displayName} — ${entry.feePerShare}/share, min $${entry.ticketMinimum}, deriv ${(entry.seriesRate * 100).toFixed(2)}% min $${entry.seriesMinimum}</option>`)
           .join('');
       } catch (cause) {
         fail(cause);

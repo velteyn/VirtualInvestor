@@ -23,4 +23,13 @@ class GameEventCodecTest {
     void unknownTypeRejected() {
         assertThrows(IllegalArgumentException.class, () -> GameEventCodec.decode("NotAnEvent", "x"));
     }
+
+    @Test
+    void settlementEventsRoundTrip() {
+        GameEvent futures = new GameEvent.FuturesSettled("h1", "NVDO-F", 5L, 650.0, 60L);
+        assertEquals(futures, GameEventCodec.decode(GameEventCodec.typeOf(futures), GameEventCodec.encode(futures)));
+
+        GameEvent option = new GameEvent.OptionSettled("h1", "NVDO-C640", 5L, 10.0, 60L);
+        assertEquals(option, GameEventCodec.decode(GameEventCodec.typeOf(option), GameEventCodec.encode(option)));
+    }
 }

@@ -49,8 +49,7 @@ class AccountTest {
     }
 
     @Test
-    void flipAttributesTheClosedLegPerSymbol() {
-        Account account = new Account("h1", 100_000.0);
+    void flipAttributesTheClosedLegPerSymbol() {        Account account = new Account("h1", 100_000.0);
         account.applyFill("ACME", OrderSide.BUY, 10L, 100.0);
         account.applyFill("ACME", OrderSide.SELL, 15L, 110.0);
 
@@ -96,5 +95,18 @@ class AccountTest {
         assertEquals(-5L, position.netQty());
         assertEquals(120.0, position.avgPrice(), EPS);
         assertEquals(100_800.0, account.cash(), EPS);
+    }
+
+    @Test
+    void buyingPowerFallsByLockedMargin() {
+        Account account = new Account("h1", 100_000.0);
+        assertEquals(100_000.0, account.buyingPower(), EPS);
+
+        account.applyFuturesFill("NVDO-F", OrderSide.BUY, 10L, 640.0, 1280.0);
+        assertEquals(87_200.0, account.buyingPower(), EPS);
+
+        account.applyFuturesFill("NVDO-F", OrderSide.SELL, 10L, 640.0, 1280.0);
+        assertEquals(100_000.0, account.buyingPower(), EPS);
+        assertEquals(0.0, account.lockedMargin(), EPS);
     }
 }

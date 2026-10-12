@@ -110,10 +110,11 @@ High realism payoff, moderate effort.
 
 ### 12. Options
 
-Calls and puts on the twenty equities, priced by deterministic Black-Scholes off the
-existing fundamental model. Adds hedging, leverage, vol trading and end-of-session gamma
-drama. A large feature (expiries, greeks, assignment), softened by the pure-intraday
-settlement: everything expires at the closing bell.
+Delivered by change `futures-options`: intraday cash-settled futures (one per
+underlying, 20% default margin) plus European calls and puts (ATM ± 3 strikes,
+one expiry at the closing bell, deterministic formula premia). Deterministic
+Black-Scholes off the existing fundamental model; everything expires at the
+closing bell. Multi-expiry chains are an explicit follow-up.
 
 ### 13. Scenario pack / story mode
 

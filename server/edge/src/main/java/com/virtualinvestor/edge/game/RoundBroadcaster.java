@@ -53,10 +53,10 @@ public class RoundBroadcaster implements EventPublisher {
                         bar.low(), bar.close(), bar.volume()));
             } else if (event instanceof GameEvent.PositionUpdated position) {
                 broadcaster.broadcast(new WireMessage.PositionDto(position.participantId(), position.symbol(),
-                        position.netQty(), position.avgPrice(), position.realized()));
+                        position.netQty(), position.avgPrice(), position.realized(), position.locked()));
             } else if (event instanceof GameEvent.AccountUpdated account) {
                 broadcaster.broadcast(new WireMessage.AccountDto(account.participantId(), account.cash(),
-                        account.realizedPnl(), account.feesPaid()));
+                        account.realizedPnl(), account.feesPaid(), account.lockedMargin()));
             } else if (event instanceof GameEvent.OrderReport report) {
                 // A self-contained order frame, modelled on FIX ExecutionReport: identity plus
                 // running fill state, so the terminal can rebuild its working-order book.

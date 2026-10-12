@@ -164,6 +164,9 @@ class PlayerStoreTest {
         assertTrue(store.bank("apex").isPresent());
         assertTrue(store.bank("no-such-bank").isEmpty());
         assertEquals(0.005, store.bank("first-ledger").orElseThrow().feePerShare());
+        assertEquals(0.001, store.bank("first-ledger").orElseThrow().seriesRate());
+        assertEquals(1.00, store.bank("first-ledger").orElseThrow().seriesMinimum());
+        assertEquals(2.00, store.bank("meridian").orElseThrow().seriesMinimum());
     }
 
     @Test

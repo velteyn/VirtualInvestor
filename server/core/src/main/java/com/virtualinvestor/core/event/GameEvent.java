@@ -128,17 +128,27 @@ public sealed interface GameEvent {
      * waiting for a resync. Emitted per counterparty with the account below.
      */
     record PositionUpdated(String participantId, String symbol, long netQty, double avgPrice, double realized,
-            long tick) implements GameEvent {
+            double locked, long tick) implements GameEvent {
     }
 
     /** A participant's cash state after a fill (cash moved and/or fees debited). */
     record AccountUpdated(String participantId, double cash, double realizedPnl, double feesPaid,
-            long tick) implements GameEvent {
+            double lockedMargin, long tick) implements GameEvent {
     }
 
     record MarginCallIssued(String participantId, double equity, double requirement, long tick) implements GameEvent {
     }
 
     record LiquidationExecuted(String participantId, String symbol, long quantity, double price, long tick) implements GameEvent {
+    }
+
+    /** A futures position cash-settled at expiry (design D6): replayable settlement economics. */
+    record FuturesSettled(String participantId, String symbol, long quantity, double settlementPrice,
+            long tick) implements GameEvent {
+    }
+
+    /** An option position cash-settled at the bell — exercised when in the money, lapsed otherwise. */
+    record OptionSettled(String participantId, String symbol, long quantity, double settlementPrice,
+            long tick) implements GameEvent {
     }
 }

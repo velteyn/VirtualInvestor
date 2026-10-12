@@ -62,7 +62,7 @@ public class GameService {
         this.runtime = runtime;
         this.players = players;
         this.dataSource = dataSource;
-        this.universe = InstrumentUniverse.defaultUniverse();
+        this.universe = InstrumentUniverse.withSeries(InstrumentUniverse.defaultUniverse());
         this.symbolSearch = new SymbolSearch(universe);
     }
 
@@ -272,7 +272,8 @@ public class GameService {
 
     private void tariff(com.virtualinvestor.runtime.RunningRound live, String seat, PlayerStore.Player player) {
         players.store().bank(player.bankId()).ifPresent(bank -> live.setFeeSchedule(seat,
-                com.virtualinvestor.runtime.FeeSchedule.fixed(bank.feePerShare(), bank.ticketMinimum())));
+                com.virtualinvestor.runtime.FeeSchedule.fixed(bank.feePerShare(), bank.ticketMinimum(),
+                        bank.seriesRate(), bank.seriesMinimum())));
     }
 
     /** Settlement write-back: every seated human's final account becomes their stored purse. */

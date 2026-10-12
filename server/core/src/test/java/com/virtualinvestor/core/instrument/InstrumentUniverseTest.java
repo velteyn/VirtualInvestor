@@ -54,4 +54,31 @@ class InstrumentUniverseTest {
                     () -> "ticker references real company: " + instrument.ticker());
         }
     }
+
+    @Test
+    void withSeriesAddsFindableDerivativeBooks() {
+        InstrumentUniverse universe = InstrumentUniverse.withSeries(InstrumentUniverse.defaultUniverse());
+
+        assertTrue(universe.size() > 21);
+        assertTrue(universe.find("NVDO-F").isPresent());
+        assertTrue(universe.find("NOPE-F").isEmpty());
+        assertTrue(universe.find("NOPE").isEmpty());
+    }
+
+    @Test
+    void equitiesExcludeSeries() {
+        InstrumentUniverse universe = InstrumentUniverse.withSeries(InstrumentUniverse.defaultUniverse());
+
+        assertEquals(20, universe.equities().size());
+        assertTrue(universe.equities().stream().noneMatch(Instrument::isSeries));
+        assertEquals(21, universe.spots().size());
+    }
+
+    @Test
+    void withSeriesIsDeterministic() {
+        InstrumentUniverse first = InstrumentUniverse.withSeries(InstrumentUniverse.defaultUniverse());
+        InstrumentUniverse second = InstrumentUniverse.withSeries(InstrumentUniverse.defaultUniverse());
+
+        assertEquals(first.all(), second.all());
+    }
 }

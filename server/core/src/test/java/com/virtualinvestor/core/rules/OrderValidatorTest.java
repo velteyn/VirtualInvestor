@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 
 class OrderValidatorTest {
 
-    private final MarketRules rules = new MarketRules(0.01, 10L, 10L);
+    private final MarketRules rules = new MarketRules(0.01, 10L, 10L, null, 0.0, 0.0);
 
     @Test
     void validLimitOrderPasses() {
@@ -38,7 +38,7 @@ class OrderValidatorTest {
 
     @Test
     void quantityBelowMinimumRejected() {
-        MarketRules largeMinimum = new MarketRules(0.01, 1L, 100L);
+        MarketRules largeMinimum = new MarketRules(0.01, 1L, 100L, null, 0.0, 0.0);
         ValidationResult result = OrderValidator.validate(largeMinimum, OrderSide.BUY, OrderType.LIMIT, 100.00, 50);
         assertFalse(result.valid());
         assertEquals("quantity below minimum 100", result.reason());

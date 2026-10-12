@@ -90,6 +90,122 @@ export function maxAffordable(cash: number, price: number): number {
   return Math.max(0, Math.floor(cash / price));
 }
 
+export type SeriesKind = 'FUTURE' | 'CALL' | 'PUT';
+
+export interface SeriesMeta {
+  kind: SeriesKind;
+  underlying: string;
+  strike: number;
+  initialMarginFraction: number;
+}
+
+const SERIES_PATTERN = /^([A-Z0-9]+)-(F|C(\d+(?:\.\d+)?)|P(\d+(?:\.\d+)?))$/;
+
+export function parseSeriesSymbol(symbol: string, initialMarginFraction = 0.2): SeriesMeta | null {
+  const match = SERIES_PATTERN.exec(symbol);
+  if (match === null) {
+    return null;
+  }
+  const underlying = match[1];
+  const leg = match[2];
+  if (leg === 'F') {
+    return { kind: 'FUTURE', underlying, strike: NaN, initialMarginFraction };
+  }
+  const strike = Number(leg.startsWith('C') ? match[3] : match[4]);
+  if (!Number.isFinite(strike) || strike <= 0) {
+    return null;
+  }
+  return { kind: leg.startsWith('C') ? 'CALL' : 'PUT', underlying, strike, initialMarginFraction };
+}
+
+export function isSeriesSymbol(symbol: string): boolean {
+  return SERIES_PATTERN.test(symbol);
+}
+
+export interface BankTerms {
+  feePerShare: number;
+  ticketMinimum: number;
+  seriesRate: number;
+  seriesMinimum: number;
+}
+
+export interface SeriesPreview {
+  notional: number;
+  fee: number;
+  lock: number;
+  need: number;
+  affordable: boolean;
+  reason: string;
+}
+
+/**
+ * Margin/premium preview mirroring the server sizing gate (futures-options):
+ * futures lock margin on notional capped at equity; long options pay premium;
+ * short options cover strike exposure. Reasons match the server's.
+ */
+export function previewSeries(
+  qty: number,
+  price: number,
+  side: 'BUY' | 'SELL',
+  meta: SeriesMeta,
+  bank: BankTerms,
+  equity: number,
+  buyingPower: number,
+): SeriesPreview {
+  if (meta.kind === 'FUTURE') {
+    const notional = price * qty;
+    const fee = Math.max(bank.seriesMinimum, bank.seriesRate * notional);
+    const lock = meta.initialMarginFraction * notional;
+    if (notional > equity) {
+      return { notional, fee, lock, need: lock + fee, affordable: false, reason: 'futures notional exceeds equity' };
+    }
+    if (lock > buyingPower) {
+      return { notional, fee, lock, need: lock + fee, affordable: false, reason: 'insufficient margin for futures order' };
+    }
+    return { notional, fee, lock, need: lock + fee, affordable: true, reason: '' };
+  }
+  const premium = price * qty;
+  const fee = Math.max(bank.seriesMinimum, bank.seriesRate * premium);
+  if (side === 'BUY') {
+    if (premium > buyingPower) {
+      return { notional: premium, fee, lock: 0, need: premium + fee, affordable: false, reason: 'insufficient buying power for option premium' };
+    }
+    return { notional: premium, fee, lock: 0, need: premium + fee, affordable: true, reason: '' };
+  }
+  const lock = meta.initialMarginFraction * meta.strike * qty;
+  if (lock > buyingPower) {
+    return { notional: premium, fee, lock, need: lock + fee, affordable: false, reason: 'insufficient margin for short option' };
+  }
+  return { notional: premium, fee, lock, need: lock + fee, affordable: true, reason: '' };
+}
+
+/** Largest whole contracts affordable, ignoring fee dust the server still checks. */
+export function maxAffordableSeries(
+  side: 'BUY' | 'SELL',
+  price: number,
+  meta: SeriesMeta,
+  equity: number,
+  buyingPower: number,
+): number {
+  if (!Number.isFinite(price) || price <= 0) {
+    return 0;
+  }
+  if (meta.kind === 'FUTURE') {
+    const byNotional = Math.floor(equity / price);
+    const byMargin = meta.initialMarginFraction > 0
+      ? Math.floor(buyingPower / (meta.initialMarginFraction * price))
+      : byNotional;
+    return Math.max(0, Math.min(byNotional, byMargin));
+  }
+  if (side === 'BUY') {
+    return Math.max(0, Math.floor(buyingPower / price));
+  }
+  if (!(meta.strike > 0) || meta.initialMarginFraction <= 0) {
+    return 0;
+  }
+  return Math.max(0, Math.floor(buyingPower / (meta.initialMarginFraction * meta.strike)));
+}
+
 // Per-page sequence; paired with a millisecond stamp so tokens are unique per
 // sender intent across pages and reloads. The server dedupes by token per
 // round, so two players (or a reload) reusing bare sequence numbers would
@@ -146,6 +262,11 @@ export function mountTicket(
         ${ORDER_SYMBOLS.map((ticker) => `<option value="${ticker}">${ticker}</option>`).join('')}
       </select>
     </label>
+    <label>Series
+      <select id="vi-tk-series">
+        <option value="">Shares</option>
+      </select>
+    </label>
     <div class="vi-ticket-side">
       <button data-side="BUY" class="vi-active vi-buy">Buy</button>
       <button data-side="SELL" class="vi-sell">Sell</button>
@@ -196,15 +317,98 @@ export function mountTicket(
   // Memory, marks and preview all follow the selected symbol.
   const storage: QtyMemory = window.localStorage;
   const symbolSelect = section.querySelector<HTMLSelectElement>('#vi-tk-symbol')!;
-  const symbol = (): string => symbolSelect.value;
+  const seriesSelect = section.querySelector<HTMLSelectElement>('#vi-tk-series')!;
+  const underlying = (): string => symbolSelect.value;
+  const symbol = (): string => seriesSelect.value === '' ? symbolSelect.value : seriesSelect.value;
+  /** Margin fraction for the selected series (chain metadata, 20% fallback). */
+  const seriesMeta = (): SeriesMeta | null => {
+    const picked = seriesSelect.value;
+    if (picked === '') {
+      return null;
+    }
+    return parseSeriesSymbol(picked, chainMargins.get(picked) ?? 0.2);
+  };
+  /** Equity estimate (cash + unrealized at last marks) and buying power. */
+  const funds = (): { equity: number; buyingPower: number } => {
+    const state = tradeFeed.state();
+    const cash = state.account?.cash ?? 0;
+    const locked = state.account?.lockedMargin ?? 0;
+    let unreal = 0;
+    for (const position of state.positions) {
+      const last = marks.get(position.symbol) ?? position.avgPrice;
+      unreal += (last - position.avgPrice) * position.netQty;
+    }
+    return { equity: cash + unreal, buyingPower: cash - locked };
+  };
+  // Listed chain per underlying: symbol → margin fraction for the preview.
+  let chainMargins = new Map<string, number>();
+  let chainRefs = new Map<string, number>();
+  let chainUnderlying = '';
+  let chainOptions = '';
+  let pendingSeries = '';
+  const renderSeriesOptions = (): void => {
+    const keep = pendingSeries !== '' ? pendingSeries : seriesSelect.value;
+    seriesSelect.innerHTML = '<option value="">Shares</option>' + chainOptions;
+    seriesSelect.value = [...seriesSelect.options].some((o) => o.value === keep) ? keep : '';
+    pendingSeries = '';
+  };
+  const loadChain = (ticker: string): void => {
+    chainUnderlying = ticker;
+    chainMargins = new Map();
+    chainRefs = new Map();
+    chainOptions = '';
+    renderSeriesOptions();
+    void client.searchSymbols(`${ticker}-`, 30, round.preset).then((matches) => {
+      if (chainUnderlying !== ticker) {
+        return;
+      }
+      const kindOf = (symbol: string): string => parseSeriesSymbol(symbol)?.kind ?? '';
+      const futures = matches.filter((m) => m.assetClass === 'Future');
+      const calls = matches.filter((m) => kindOf(m.ticker) === 'CALL');
+      const puts = matches.filter((m) => kindOf(m.ticker) === 'PUT');
+      chainMargins = new Map(matches.map((m) => [m.ticker, m.initialMarginFraction]));
+      chainRefs = new Map(matches.map((m) => [m.ticker, m.referencePrice]));
+      const opt = (m: { ticker: string }): string => {
+        const ref = chainRefs.get(m.ticker);
+        const hint = ref !== undefined && kindOf(m.ticker) !== 'FUTURE' ? ` (~$${ref.toFixed(2)})` : '';
+        return `<option value="${m.ticker}">${m.ticker}${hint}</option>`;
+      };
+      chainOptions =
+        (futures.length > 0 ? `<optgroup label="Futures">${futures.map(opt).join('')}</optgroup>` : '')
+        + (calls.length > 0 ? `<optgroup label="Calls">${calls.map(opt).join('')}</optgroup>` : '')
+        + (puts.length > 0 ? `<optgroup label="Puts">${puts.map(opt).join('')}</optgroup>` : '');
+      renderSeriesOptions();
+      renderPreview();
+    }).catch(() => {
+      /* series picker stays Shares-only when the chain cannot load */
+    });
+  };
   const refreshQty = (): void => {
     qty.value = String(rememberedQty(storage, symbol(), 100));
   };
   refreshQty();
+  loadChain(underlying());
   symbolSelect.addEventListener('change', () => {
     refreshQty();
     limitDirty = false;
     stopDirty = false;
+    followTouch();
+    loadChain(underlying());
+    renderPreview();
+  });
+  seriesSelect.addEventListener('change', () => {
+    refreshQty();
+    limitDirty = false;
+    stopDirty = false;
+    // Empty series books have no touch: start the limit at the listed reference
+    // (intrinsic floor for options) instead of zero so Transmit can proceed.
+    if (seriesSelect.value !== '') {
+      const ref = chainRefs.get(seriesSelect.value);
+      if (ref !== undefined && Number.isFinite(ref) && ref > 0) {
+        limit.value = String(ref);
+        limitDirty = true;
+      }
+    }
     followTouch();
     renderPreview();
   });
@@ -220,7 +424,13 @@ export function mountTicket(
     button.addEventListener('click', () => {
       const lot = button.getAttribute('data-lot');
       if (lot === 'max') {
-        qty.value = String(maxAffordable(tradeFeed.state().account?.cash ?? 0, ticketPrice()));
+        const meta = seriesMeta();
+        if (meta === null) {
+          qty.value = String(maxAffordable(tradeFeed.state().account?.cash ?? 0, ticketPrice()));
+        } else {
+          const { equity, buyingPower } = funds();
+          qty.value = String(maxAffordableSeries(side, ticketPrice(), meta, equity, buyingPower));
+        }
       } else {
         qty.value = lot ?? '100';
       }
@@ -283,11 +493,16 @@ export function mountTicket(
 
   // Fee preview with buying-power guard (order-ticket 1.4): mirrors the server
   // formula so the preview never lies; Transmit disables over buying power.
-  let bank: { feePerShare: number; ticketMinimum: number } | null = null;
+  let bank: BankTerms | null = null;
   void client.banks().then((banks) => {
     const mine = banks.find((b) => b.bankId === client.bankOfPlayer()) ?? banks[0];
     if (mine !== undefined) {
-      bank = { feePerShare: mine.feePerShare, ticketMinimum: mine.ticketMinimum };
+      bank = {
+        feePerShare: mine.feePerShare,
+        ticketMinimum: mine.ticketMinimum,
+        seriesRate: mine.seriesRate,
+        seriesMinimum: mine.seriesMinimum,
+      };
       renderPreview();
     }
   }).catch(() => {
@@ -307,6 +522,19 @@ export function mountTicket(
     if (bank === null) {
       preview.textContent = `${side} ${quantity} ${symbol()} @ ${price.toFixed(2)} = $${(quantity * price).toFixed(0)}`;
       send.disabled = false;
+      return;
+    }
+    const meta = seriesMeta();
+    if (meta !== null) {
+      const { equity, buyingPower } = funds();
+      const series = previewSeries(quantity, price, side, meta, bank, equity, buyingPower);
+      const left = buyingPower - series.need;
+      const kindLabel = meta.kind === 'FUTURE' ? 'margin' : side === 'BUY' ? 'premium' : 'margin';
+      preview.textContent =
+        `${side} ${quantity} ${symbol()} @ ${price.toFixed(2)} = $${series.notional.toFixed(0)}`
+        + ` + $${series.fee.toFixed(2)} fee + $${series.lock.toFixed(0)} ${kindLabel} → $${left.toFixed(0)} left`;
+      send.disabled = !series.affordable;
+      error.textContent = series.affordable ? '' : series.reason;
       return;
     }
     const quote = previewQuote(quantity, price, cash, bank);
@@ -371,9 +599,19 @@ export function mountTicket(
 
   return {
     prefill(order: { side: 'BUY' | 'SELL'; type: OrderCommand['type']; price?: number; symbol?: string }): void {
-      if (order.symbol !== undefined && ORDER_SYMBOLS.includes(order.symbol)) {
-        symbolSelect.value = order.symbol;
-        refreshQty();
+      if (order.symbol !== undefined) {
+        if (ORDER_SYMBOLS.includes(order.symbol)) {
+          symbolSelect.value = order.symbol;
+          refreshQty();
+        } else {
+          const meta = parseSeriesSymbol(order.symbol);
+          if (meta !== null && ORDER_SYMBOLS.includes(meta.underlying)) {
+            symbolSelect.value = meta.underlying;
+            pendingSeries = order.symbol;
+            loadChain(meta.underlying);
+            refreshQty();
+          }
+        }
       }
       side = order.side;
       sideButtons.forEach((b) => b.classList.toggle('vi-active', b.getAttribute('data-side') === side));

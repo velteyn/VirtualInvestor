@@ -49,4 +49,33 @@ class FillHistoryTest {
 
         assertTrue(FillHistory.fold(events, "human", FeeSchedule.none()).isEmpty());
     }
+
+    @Test
+    void settlementClosesAppearAsRows() {
+        List<SequencedEvent> events = List.of(
+                new SequencedEvent(1L, new GameEvent.FuturesSettled("human", "NVDO-F", 5L, 650.0, 60L)),
+                new SequencedEvent(2L, new GameEvent.OptionSettled("rival-1", "NVDO-C640", 5L, 10.0, 60L)),
+                new SequencedEvent(3L, new GameEvent.OptionSettled("human", "NVDO-P640", 5L, 0.0, 60L)));
+
+        List<FillHistory.FillRow> rows = FillHistory.fold(events, "human", FeeSchedule.none());
+
+        assertEquals(2, rows.size());
+        assertEquals("NVDO-F", rows.get(0).symbol());
+        assertEquals(650.0, rows.get(0).price(), 1e-9);
+        assertEquals(0.0, rows.get(0).fee(), 1e-9);
+        assertEquals("NVDO-P640", rows.get(1).symbol());
+    }
+
+    @Test
+    void seriesFillsPriceSeriesFees() {
+        GameEvent.OrderReport fill = new GameEvent.OrderReport("o9", "human", "NVDO-F", OrderSide.BUY,
+                OrderType.LIMIT, 5L, 640.0, 5L, 0L, OrderStatus.FILLED, OrderEventKind.FILL, null, 7L);
+        List<SequencedEvent> events = List.of(new SequencedEvent(1L, fill));
+
+        List<FillHistory.FillRow> rows =
+                FillHistory.fold(events, "human", FeeSchedule.fixed(0.01, 2.0, 0.001, 1.0));
+
+        assertEquals(1, rows.size());
+        assertEquals(Math.max(1.0, 0.001 * 5L * 640.0), rows.get(0).fee(), 1e-9);
+    }
 }

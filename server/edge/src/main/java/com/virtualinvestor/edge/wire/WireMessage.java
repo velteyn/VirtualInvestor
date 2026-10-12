@@ -102,12 +102,14 @@ public interface WireMessage {
     }
 
     @JsonTypeName("position")
-    record PositionDto(String participantId, String symbol, long netQty, double avgPrice, double realized)
+    record PositionDto(String participantId, String symbol, long netQty, double avgPrice, double realized,
+            double locked)
             implements WireMessage.Payload {
     }
 
     @JsonTypeName("account")
-    record AccountDto(String participantId, double cash, double realizedPnl, double feesPaid)
+    record AccountDto(String participantId, double cash, double realizedPnl, double feesPaid,
+            double lockedMargin)
             implements WireMessage.Payload {
     }
 

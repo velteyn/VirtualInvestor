@@ -50,6 +50,10 @@ public record Instrument(
         return type == InstrumentType.INDEX;
     }
 
+    public boolean isSeries() {
+        return type == InstrumentType.FUTURE || type == InstrumentType.OPTION;
+    }
+
     private static void requireText(String value, String field) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(field + " must not be blank");

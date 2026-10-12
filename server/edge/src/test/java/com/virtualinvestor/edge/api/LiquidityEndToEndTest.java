@@ -11,6 +11,7 @@ import com.virtualinvestor.core.domain.OrderSide;
 import com.virtualinvestor.core.domain.OrderStatus;
 import com.virtualinvestor.core.event.GameEvent;
 import com.virtualinvestor.core.domain.SessionPhase;
+import com.virtualinvestor.core.instrument.SeriesSymbols;
 import com.virtualinvestor.edge.EdgeApplication;
 import com.virtualinvestor.edge.game.GameService;
 import com.virtualinvestor.edge.game.RoundRuntimeService;
@@ -225,7 +226,7 @@ class LiquidityEndToEndTest {
     private WalkTarget scanWalkTarget(com.virtualinvestor.runtime.RunningRound live, long cash) {
         WalkTarget best = null;
         long bestTotal = 0L;
-        for (String symbol : live.engines().keySet()) {
+        for (String symbol : spotSymbols(live)) {
             List<DepthLevel> asks = live.engines().get(symbol).book().depth(OrderSide.SELL, 5);
             long total = asks.stream().mapToLong(DepthLevel::quantity).sum();
             long touch = asks.isEmpty() ? 0L : asks.get(0).quantity();
@@ -256,11 +257,19 @@ class LiquidityEndToEndTest {
      * it. The sweep's own flow is the stress: toxicity jumps several times above
      * baseline while maker sizes fade. Returns the swept symbol.
      */
+    /** Spot symbols only: this scenario measures the spot liquidity game. */
+    private static List<String> spotSymbols(com.virtualinvestor.runtime.RunningRound live) {
+        return live.engines().keySet().stream()
+                .filter(symbol -> !SeriesSymbols.isSeriesSymbol(symbol))
+                .sorted()
+                .toList();
+    }
+
     private String sweep(com.virtualinvestor.runtime.RunningRound live, String roundId) {
         for (long i = 0; i < 200L; i++) {
             String deepest = null;
             long bestDepth = 0L;
-            for (String symbol : live.engines().keySet()) {
+            for (String symbol : spotSymbols(live)) {
                 long depth = live.engines().get(symbol).book().aggregateQuantity(OrderSide.SELL, 5);
                 if (depth > bestDepth) {
                     bestDepth = depth;

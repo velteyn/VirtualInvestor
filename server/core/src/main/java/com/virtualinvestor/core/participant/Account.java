@@ -1,6 +1,7 @@
 package com.virtualinvestor.core.participant;
 
 import com.virtualinvestor.core.domain.OrderSide;
+import com.virtualinvestor.core.instrument.SeriesSymbols;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -9,7 +10,10 @@ import java.util.Objects;
 /**
  * Cash, positions and P&L for one participant. Fills are applied through {@link #applyFill},
  * which maintains the average entry price, realizes profit when a position is reduced or
- * flipped, and moves cash. Equity is cash plus the mark-to-market value of open positions.
+ * flipped, and moves cash. Futures fills go through {@link #applyFuturesFill}, which locks
+ * margin instead of exchanging notional; option fills go through {@link #applyOptionFill},
+ * which settles premium like an equity fill. Equity is cash plus the mark-to-market value
+ * of open positions (unrealized P&L for futures, whose entry exchanges no cash).
  */
 public final class Account {
 
@@ -20,6 +24,7 @@ public final class Account {
     private double realizedPnl;
     private double feesPaid;
     private final Map<String, Double> realizedBySymbol = new LinkedHashMap<>();
+    private final Map<String, Double> lockedBySymbol = new LinkedHashMap<>();
 
     public Account(String participantId, double openingCash) {
         this.participantId = Objects.requireNonNull(participantId, "participantId");
@@ -73,9 +78,23 @@ public final class Account {
         return Collections.unmodifiableMap(positions);
     }
 
-    /** Cash available to open new positions. Margin-aware buying power lands in task 8.5. */
+    /** Cash available to open new positions: cash minus margin locked in futures. */
     public double buyingPower() {
-        return cash;
+        return cash - lockedMargin();
+    }
+
+    /** Margin currently locked in open futures positions. */
+    public double lockedMargin() {
+        double total = 0.0;
+        for (double locked : lockedBySymbol.values()) {
+            total += locked;
+        }
+        return total;
+    }
+
+    /** Margin locked for one series symbol, or zero. */
+    public double lockedFor(String ticker) {
+        return lockedBySymbol.getOrDefault(ticker, 0.0);
     }
 
     /** Apply an execution: move cash, update the position and realize P&L where applicable. */
@@ -84,6 +103,56 @@ public final class Account {
             throw new IllegalArgumentException("fill quantity must be positive");
         }
         long signed = side == OrderSide.BUY ? quantity : -quantity;
+        updatePosition(ticker, signed, price);
+        cash += -signed * price;
+    }
+
+    /**
+     * Apply an option fill: premium moves from buyer to seller exactly like an equity
+     * fill, with the premium as the entry price.
+     */
+    public void applyOptionFill(String ticker, OrderSide side, long quantity, double premium) {
+        applyFill(ticker, side, quantity, premium);
+    }
+
+    /**
+     * Apply a futures fill: no notional cash changes hands. Opening (or adding) locks
+     * {@code marginPerContract} per contract; reducing releases locked margin
+     * proportionally; flipping releases the old lock and locks the new side.
+     */
+    public void applyFuturesFill(String ticker, OrderSide side, long quantity, double price,
+            double marginPerContract) {
+        if (quantity <= 0L) {
+            throw new IllegalArgumentException("fill quantity must be positive");
+        }
+        if (!Double.isFinite(marginPerContract) || marginPerContract < 0.0) {
+            throw new IllegalArgumentException("marginPerContract must be finite and non-negative");
+        }
+        long signed = side == OrderSide.BUY ? quantity : -quantity;
+        Position current = position(ticker);
+        long before = Math.abs(current.netQty());
+        boolean adding = before == 0L || (current.netQty() > 0L) == (signed > 0L);
+        double lockedBefore = lockedBySymbol.getOrDefault(ticker, 0.0);
+        double realizedBefore = realizedPnl;
+        updatePosition(ticker, signed, price);
+        // Variation settles in cash when it is realized (open/close/flip legs book
+        // into realizedPnl with no notional exchange, so the delta moves here).
+        cash += realizedPnl - realizedBefore;
+        Position after = position(ticker);
+        if (after.isFlat()) {
+            lockedBySymbol.remove(ticker);
+        } else if (adding) {
+            lockedBySymbol.merge(ticker, marginPerContract * quantity, Double::sum);
+        } else if (Math.abs(after.netQty()) <= before) {
+            double released = before == 0L ? lockedBefore : lockedBefore * quantity / before;
+            setLocked(ticker, lockedBefore - released);
+        } else {
+            lockedBySymbol.put(ticker, marginPerContract * Math.abs(after.netQty()));
+        }
+    }
+
+    /** Update the position and realize P&L where the fill reduces or flips it. */
+    private void updatePosition(String ticker, long signed, double price) {
         Position current = position(ticker);
         long netQty = current.netQty();
         double avgPrice = current.avgPrice();
@@ -115,12 +184,19 @@ public final class Account {
             }
         }
 
-        cash += -signed * price;
         if (newNetQty == 0L) {
             positions.remove(ticker);
         } else {
             positions.put(ticker,
                     new Position(ticker, newNetQty, newAvgPrice, realizedBySymbol.getOrDefault(ticker, 0.0)));
+        }
+    }
+
+    private void setLocked(String ticker, double locked) {
+        if (locked <= 1e-9) {
+            lockedBySymbol.remove(ticker);
+        } else {
+            lockedBySymbol.put(ticker, locked);
         }
     }
 
@@ -141,10 +217,23 @@ public final class Account {
         double total = cash;
         for (Position position : positions.values()) {
             Double mark = marks.get(position.ticker());
-            if (mark != null) {
+            if (mark == null) {
+                continue;
+            }
+            if (isFuture(position.ticker())) {
+                // A future exchanges no notional at entry, so only its unrealized
+                // P&L counts toward equity — never the leveraged notional value.
+                total += position.unrealized(mark);
+            } else {
                 total += position.marketValue(mark);
             }
         }
         return total;
+    }
+
+    private static boolean isFuture(String ticker) {
+        return SeriesSymbols.parse(ticker)
+                .map(terms -> terms.kind() == SeriesSymbols.SeriesKind.FUTURE)
+                .orElse(false);
     }
 }

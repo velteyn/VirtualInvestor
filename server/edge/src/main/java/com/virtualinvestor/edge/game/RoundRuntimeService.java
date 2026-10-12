@@ -193,10 +193,11 @@ public class RoundRuntimeService {
                 continue;
             }
             frames.add(new WireMessage.PositionDto(participantId, position.ticker(), position.netQty(),
-                    position.avgPrice(), position.realized()));
+                    position.avgPrice(), position.realized(), account.lockedFor(position.ticker())));
         }
         frames.add(new WireMessage.AccountDto(
-                participantId, account.cash(), account.realizedPnl(), account.feesPaid()));
+                participantId, account.cash(), account.realizedPnl(), account.feesPaid(),
+                account.lockedMargin()));
         return frames;
     }
 

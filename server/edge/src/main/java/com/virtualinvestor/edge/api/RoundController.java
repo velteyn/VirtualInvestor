@@ -2,6 +2,7 @@ package com.virtualinvestor.edge.api;
 
 import com.virtualinvestor.core.game.LaunchConfig;
 import com.virtualinvestor.core.participant.Standing;
+import com.virtualinvestor.core.rules.MarketRules;
 import com.virtualinvestor.core.rules.RealismPreset;
 import com.virtualinvestor.edge.game.GameService;
 import com.virtualinvestor.edge.wire.WireMessage;
@@ -73,10 +74,29 @@ public class RoundController {
     @PostMapping(path = "/symbols/search", version = "1")
     public List<SymbolResponse> searchSymbols(@RequestBody SymbolSearchRequest request) {
         int limit = request.limit() <= 0 ? 20 : request.limit();
+        RealismPreset preset = request.preset() == null || request.preset().isBlank()
+                ? RealismPreset.REALISTIC
+                : parsePreset(request.preset());
         return game.search(request.query(), limit).stream()
-                .map(instrument -> new SymbolResponse(
-                        instrument.ticker(), instrument.name(), instrument.sector(),
-                        instrument.isIndex() ? "Index" : "Equity"))
+                .map(instrument -> {
+                    String assetClass = switch (instrument.type()) {
+                        case INDEX -> "Index";
+                        case EQUITY -> "Equity";
+                        case FUTURE -> "Future";
+                        case OPTION -> "Option";
+                    };
+                    double initialMargin = 0.0;
+                    double maintenanceMargin = 0.0;
+                    if (instrument.isSeries()) {
+                        MarketRules rules = MarketRules.forSeries(instrument, preset);
+                        initialMargin = rules.initialMarginFraction();
+                        maintenanceMargin = rules.maintenanceMarginFraction();
+                    }
+                    return new SymbolResponse(
+                            instrument.ticker(), instrument.name(), instrument.sector(), assetClass,
+                            instrument.tickSize(), instrument.quantityGrid(), instrument.referencePrice(),
+                            initialMargin, maintenanceMargin);
+                })
                 .toList();
     }
 
@@ -191,10 +211,12 @@ public class RoundController {
     public record BarResponse(long time, double open, double high, double low, double close, long volume) {
     }
 
-    public record SymbolSearchRequest(String query, int limit) {
+    public record SymbolSearchRequest(String query, int limit, String preset) {
     }
 
-    public record SymbolResponse(String ticker, String name, String sector, String assetClass) {
+    public record SymbolResponse(String ticker, String name, String sector, String assetClass,
+            double tickSize, long quantityGrid, double referencePrice,
+            double initialMarginFraction, double maintenanceMarginFraction) {
     }
 
     public record LeaderboardRequest(String roundId) {

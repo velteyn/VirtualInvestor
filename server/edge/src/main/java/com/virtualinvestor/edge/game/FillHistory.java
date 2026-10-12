@@ -1,6 +1,7 @@
 package com.virtualinvestor.edge.game;
 
 import com.virtualinvestor.core.event.GameEvent;
+import com.virtualinvestor.core.instrument.SeriesSymbols;
 import com.virtualinvestor.persist.event.SequencedEvent;
 import com.virtualinvestor.runtime.FeeSchedule;
 import java.util.ArrayList;
@@ -25,27 +26,47 @@ public final class FillHistory {
 
     public static List<FillRow> fold(List<SequencedEvent> events, String participantId, FeeSchedule fees) {
         Map<String, Accumulator> open = new LinkedHashMap<>();
+        List<FillRow> settled = new ArrayList<>();
         for (SequencedEvent sequenced : events) {
-            if (!(sequenced.event() instanceof GameEvent.OrderReport report)) {
-                continue;
+            if (sequenced.event() instanceof GameEvent.OrderReport report) {
+                if (!report.participantId().equals(participantId)) {
+                    continue;
+                }
+                if (report.event() != com.virtualinvestor.core.domain.OrderEventKind.FILL
+                        && report.event() != com.virtualinvestor.core.domain.OrderEventKind.PARTIAL_FILL) {
+                    continue;
+                }
+                open.compute(report.orderId(), (id, acc) -> acc == null
+                        ? new Accumulator(report)
+                        : acc.update(report));
+            } else if (sequenced.event() instanceof GameEvent.FuturesSettled fill) {
+                if (fill.participantId().equals(participantId)) {
+                    settled.add(settlementRow(fill.symbol(), fill.quantity(), fill.settlementPrice(),
+                            fill.tick()));
+                }
+            } else if (sequenced.event() instanceof GameEvent.OptionSettled fill) {
+                if (fill.participantId().equals(participantId)) {
+                    settled.add(settlementRow(fill.symbol(), fill.quantity(), fill.settlementPrice(),
+                            fill.tick()));
+                }
             }
-            if (!report.participantId().equals(participantId)) {
-                continue;
-            }
-            if (report.event() != com.virtualinvestor.core.domain.OrderEventKind.FILL
-                    && report.event() != com.virtualinvestor.core.domain.OrderEventKind.PARTIAL_FILL) {
-                continue;
-            }
-            open.compute(report.orderId(), (id, acc) -> acc == null
-                    ? new Accumulator(report)
-                    : acc.update(report));
         }
         List<FillRow> rows = new ArrayList<>();
         for (Accumulator acc : open.values()) {
+            double fee = SeriesSymbols.isSeriesSymbol(acc.symbol)
+                    ? fees.feeForSeries(acc.filled, acc.filled * acc.price)
+                    : fees.feeFor(acc.filled);
             rows.add(new FillRow(acc.orderId, acc.symbol, acc.side, acc.orderType, acc.quantity,
-                    acc.filled, acc.price, fees.feeFor(acc.filled), acc.tick));
+                    acc.filled, acc.price, fee, acc.tick));
         }
+        rows.addAll(settled);
         return rows;
+    }
+
+    /** A journal row for an expiry/exercise close: no order, no fee, just economics. */
+    private static FillRow settlementRow(String symbol, long quantity, double settlementPrice, long tick) {
+        return new FillRow("expiry", symbol, "CLOSE", "SETTLEMENT", quantity, quantity, settlementPrice,
+                0.0, tick);
     }
 
     private static final class Accumulator {

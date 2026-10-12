@@ -57,6 +57,16 @@ public final class InstrumentUniverse {
         return new InstrumentUniverse(instruments);
     }
 
+    /**
+     * A round universe: the base universe plus its listed derivative series (design D1).
+     * Deterministic: the same base always yields the same series in the same order.
+     */
+    public static InstrumentUniverse withSeries(InstrumentUniverse base) {
+        List<Instrument> combined = new ArrayList<>(base.all());
+        combined.addAll(SeriesLister.list(base));
+        return new InstrumentUniverse(combined);
+    }
+
     public static InstrumentUniverse fromClasspath(String resource) {
         ClassLoader loader = Thread.currentThread().getContextClassLoader();
         if (loader == null) {
@@ -123,7 +133,12 @@ public final class InstrumentUniverse {
     }
 
     public List<Instrument> equities() {
-        return instruments.stream().filter(instrument -> !instrument.isIndex()).toList();
+        return instruments.stream().filter(instrument -> instrument.type() == InstrumentType.EQUITY).toList();
+    }
+
+    /** Spot instruments (equities plus the index): everything that is not a derivative series. */
+    public List<Instrument> spots() {
+        return instruments.stream().filter(instrument -> !instrument.isSeries()).toList();
     }
 
     public Optional<Instrument> find(String ticker) {

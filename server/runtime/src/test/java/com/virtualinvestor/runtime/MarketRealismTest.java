@@ -9,6 +9,7 @@ import com.virtualinvestor.core.domain.OrderType;
 import com.virtualinvestor.core.domain.SessionPhase;
 import com.virtualinvestor.core.event.GameEvent;
 import com.virtualinvestor.core.game.LaunchConfig;
+import com.virtualinvestor.core.instrument.SeriesSymbols;
 import com.virtualinvestor.core.rules.RealismPreset;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -125,8 +126,10 @@ class MarketRealismTest {
                 emptySideTicks++;
             }
             if (continuous) {
+                // Spot books only: series books are intentionally unquoted until
+                // market-making extends to them, so they sit out this invariant.
                 for (String symbol : round.engines().keySet()) {
-                    if (sideEmpty(round, symbol)) {
+                    if (!SeriesSymbols.isSeriesSymbol(symbol) && sideEmpty(round, symbol)) {
                         emptySideBySymbol.merge(symbol, 1L, Long::sum);
                     }
                 }
@@ -193,10 +196,12 @@ class MarketRealismTest {
             calmTwoMakers.put(symbol, calmTicks == 0 ? 0.0 : (double) withTwo / calmTicks);
         }
         System.out.println("  calm-tick fraction with ≥2 makers quoting: " + calmTwoMakers);
-        long calmTotal = Math.max(1, calmTicks * round.engines().size());
+        long calmTotal = Math.max(1, calmTicks * round.engines().keySet().stream()
+                .filter(symbol -> !SeriesSymbols.isSeriesSymbol(symbol))
+                .count());
         long emptyTotal = emptySideBySymbol.values().stream().mapToLong(Long::longValue).sum();
         double emptyFraction = (double) emptyTotal / calmTotal;
-        System.out.println("  empty-side fraction across all symbols: "
+        System.out.println("  empty-side fraction across spot symbols: "
                 + String.format("%.3f", emptyFraction));
         Map<String, Double> marks = round.marks();
         record Standing(String name, double equity, double fees) {
@@ -221,7 +226,7 @@ class MarketRealismTest {
                 "rejects for no liquidity stay under 0.5% of trades, got " + rejectedNoLiquidity
                         + "/" + trades);
         assertTrue(emptyFraction <= 0.30,
-                "books sit empty at most 30% of symbol-ticks, got " + emptyFraction);
+                "spot books sit empty at most 30% of symbol-ticks, got " + emptyFraction);
         long wellQuoted = calmTwoMakers.entrySet().stream()
                 .filter(entry -> !entry.getKey().equals("VNDX") && entry.getValue() >= 0.5)
                 .count();

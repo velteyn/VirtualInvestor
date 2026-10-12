@@ -28,6 +28,11 @@ export interface SymbolResponse {
   name: string;
   sector: string;
   assetClass: string;
+  tickSize: number;
+  quantityGrid: number;
+  referencePrice: number;
+  initialMarginFraction: number;
+  maintenanceMarginFraction: number;
 }
 
 export interface GameListing {
@@ -102,6 +107,8 @@ export interface BankResponse {
   feePerShare: number;
   ticketMinimum: number;
   custodyRate: number;
+  seriesRate: number;
+  seriesMinimum: number;
 }
 
 export interface FillRow {
@@ -185,8 +192,8 @@ export class ServerClient {
     return this.post<RoundResponse>('/api/rounds', { ...config, sessionToken: this.loginToken });
   }
 
-  searchSymbols(query: string, limit = 20): Promise<SymbolResponse[]> {
-    return this.post<SymbolResponse[]>('/api/symbols/search', { query, limit });
+  searchSymbols(query: string, limit = 20, preset?: string): Promise<SymbolResponse[]> {
+    return this.post<SymbolResponse[]>('/api/symbols/search', { query, limit, preset });
   }
 
   /** Warm-up history for a symbol in a running round, as OHLCV bars. */

@@ -10,6 +10,7 @@ import com.virtualinvestor.core.domain.OrderType;
 import com.virtualinvestor.core.domain.RoundState;
 import com.virtualinvestor.core.event.GameEvent;
 import com.virtualinvestor.core.game.LaunchConfig;
+import com.virtualinvestor.core.instrument.InstrumentUniverse;
 import com.virtualinvestor.core.rules.RealismPreset;
 import java.util.ArrayList;
 import java.util.List;
@@ -32,7 +33,10 @@ class RunningRoundTest {
     void constructsARunningRoundFromSeedAndConfig() {
         RunningRound round = round(42L);
 
-        assertEquals(21, round.engines().size());
+        assertEquals(
+                InstrumentUniverse.withSeries(InstrumentUniverse.defaultUniverse()).size(),
+                round.engines().size(),
+                "one book per spot instrument plus every listed series");
         assertEquals(9, round.participants().size(), "human + 5 rivals + 3 institutions");
         assertEquals(1 + 5 + 3, round.participants().size());
         assertEquals(0L, round.tick());

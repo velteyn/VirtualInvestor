@@ -44,4 +44,37 @@ class SymbolSearchTest {
     void respectsLimit() {
         assertEquals(3, search.search("", 3).size());
     }
+
+    @Test
+    void chainListsFutureThenCallsThenPuts() {
+        SymbolSearch withSeries = new SymbolSearch(
+                InstrumentUniverse.withSeries(InstrumentUniverse.defaultUniverse()));
+        List<Instrument> chain = withSeries.chain("NVDO");
+
+        assertEquals("NVDO-F", chain.get(0).ticker());
+        assertEquals(1 + 2 * (1 + 2 * 3), chain.size());
+        List<Double> callStrikes = chain.stream()
+                .filter(i -> i.ticker().contains("-C"))
+                .map(i -> SeriesSymbols.parse(i.ticker()).orElseThrow().strike())
+                .toList();
+        List<Double> sorted = callStrikes.stream().sorted().toList();
+        assertEquals(sorted, callStrikes);
+    }
+
+    @Test
+    void chainIsEmptyWithoutSeries() {
+        assertTrue(search.chain("NVDO").isEmpty());
+        SymbolSearch withSeries = new SymbolSearch(
+                InstrumentUniverse.withSeries(InstrumentUniverse.defaultUniverse()));
+        assertTrue(withSeries.chain("NOPE").isEmpty());
+        assertTrue(withSeries.chain(null).isEmpty());
+    }
+
+    @Test
+    void searchFindsSeriesByPrefix() {
+        SymbolSearch withSeries = new SymbolSearch(
+                InstrumentUniverse.withSeries(InstrumentUniverse.defaultUniverse()));
+        List<Instrument> results = withSeries.search("NVDO-", 30);
+        assertTrue(results.stream().anyMatch(i -> i.ticker().equals("NVDO-F")));
+    }
 }

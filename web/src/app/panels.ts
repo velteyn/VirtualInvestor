@@ -6,6 +6,7 @@
  */
 import type { LeaderboardEntry, RoundResponse, ServerClient, WirePayload } from '../adapters/serverClient';
 import type { VirtualInvestorTradeFeed } from '../adapters/tradeFeed';
+import { describePosition } from './positions-view';
 
 export interface Panels {
   destroy(): void;
@@ -153,16 +154,18 @@ export function mountPanels(
       posRows.textContent = 'No open positions';
     } else {
       posRows.innerHTML = state.positions.map((position) => {
-        const last = prices.get(position.symbol) ?? position.avgPrice;
-        const pnl = (last - position.avgPrice) * position.netQty;
-        return `<div class="vi-pos"><span>${position.symbol}</span>
-          <span>${position.netQty > 0 ? '+' : ''}${position.netQty} @ ${position.avgPrice.toFixed(2)}</span>
-          <span class="${pnl >= 0 ? 'vi-up' : 'vi-down'}">P&L ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}</span>
+        const view = describePosition(position, prices.get(position.symbol) ?? position.avgPrice, NaN);
+        const tag = view.expiry ? ' • exp' : '';
+        const lock = position.locked > 0 ? ` (locked $${position.locked.toFixed(0)})` : '';
+        return `<div class="vi-pos"><span>${position.symbol}${tag}</span>
+          <span>${position.netQty > 0 ? '+' : ''}${position.netQty} @ ${position.avgPrice.toFixed(2)}${lock}</span>
+          <span class="${view.unreal >= 0 ? 'vi-up' : 'vi-down'}">P&L ${view.unreal >= 0 ? '+' : ''}${view.unreal.toFixed(2)}</span>
           <button data-symbol="${position.symbol}">Close</button></div>`;
       }).join('');
     }
+    const locked = state.account?.lockedMargin ?? 0;
     accountLine.textContent = state.account
-      ? `Cash $${state.account.cash.toLocaleString(undefined, { maximumFractionDigits: 0 })} · Realized $${state.account.realizedPnl.toFixed(0)}`
+      ? `Cash $${state.account.cash.toLocaleString(undefined, { maximumFractionDigits: 0 })} · Realized $${state.account.realizedPnl.toFixed(0)}${locked > 0 ? ` · Locked $${locked.toFixed(0)}` : ''}`
       : '';
   };
   renderPositions();

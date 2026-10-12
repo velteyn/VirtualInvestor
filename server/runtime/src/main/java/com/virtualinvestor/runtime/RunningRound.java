@@ -24,6 +24,10 @@ import com.virtualinvestor.core.game.Settlement;
 import com.virtualinvestor.core.game.WarmupGenerator;
 import com.virtualinvestor.core.instrument.Instrument;
 import com.virtualinvestor.core.instrument.InstrumentUniverse;
+import com.virtualinvestor.core.instrument.SeriesLister;
+import com.virtualinvestor.core.instrument.SeriesSymbols;
+import com.virtualinvestor.core.pricing.OptionPricing;
+import com.virtualinvestor.core.pricing.SeriesMarks;
 import com.virtualinvestor.core.market.Bar;
 import com.virtualinvestor.core.news.NewsEngine;
 import com.virtualinvestor.core.news.NewsGenerator;
@@ -47,6 +51,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Consumer;
 
 /**
@@ -113,6 +118,8 @@ public final class RunningRound {
     private String indexTicker = "VNDX";
     private final Map<String, Double> previousPrices;
     private final Map<String, Double> startingCapitals;
+    /** Series symbols the makers quote: every future plus options within one step of ATM. */
+    private final java.util.Set<String> quotedSeries;
     private final Map<String, MarketRules> marketRules = new LinkedHashMap<>();
     private final Map<String, CircuitBreaker> breakers = new LinkedHashMap<>();
     private final Map<String, ShortSalePolicy> shortPolicies = new LinkedHashMap<>();
@@ -132,6 +139,8 @@ public final class RunningRound {
     private final Map<String, BarAccumulator> barWindows = new LinkedHashMap<>();
     private final long barSeconds;
     private final Map<String, Long> barBaseSec = new LinkedHashMap<>();
+    /** Shared bar-axis end for symbols without warm-up history (series books). */
+    private long historyEndSec = 1_700_000_000L;
 
     /** One forming OHLCV window. */
     private static final class BarAccumulator {
@@ -201,7 +210,7 @@ public final class RunningRound {
         this.barSeconds = Math.max(1L, BAR_TICKS * stepMillis / 1_000L);
 
         long durationTicks = config.durationTicks(stepMillis);
-        this.universe = InstrumentUniverse.defaultUniverse();
+        this.universe = InstrumentUniverse.withSeries(InstrumentUniverse.defaultUniverse());
         for (Instrument instrument : universe.all()) {
             sectorByTicker.put(instrument.ticker(), instrument.sector());
             if (instrument.isIndex()) {
@@ -232,9 +241,19 @@ public final class RunningRound {
 
         this.engines = new LinkedHashMap<>();
         this.previousPrices = new LinkedHashMap<>();
+        this.quotedSeries = quotedSeries(universe);
         for (Instrument instrument : universe.all()) {
             engines.put(instrument.ticker(), new InstrumentEngine(instrument.ticker(), instrument.referencePrice()));
             previousPrices.put(instrument.ticker(), instrument.referencePrice());
+            if (instrument.isSeries()) {
+                // Derivative series: own book and series rules, but no circuit breaker of
+                // their own (halts propagate from the underlying) and no short-sale gate
+                // (selling is margined, not restricted — enforced in later tasks).
+                marketRules.put(instrument.ticker(),
+                        MarketRules.forSeries(instrument, config.preset()));
+                shortPolicies.put(instrument.ticker(), new ShortSalePolicy(true));
+                continue;
+            }
             marketRules.put(instrument.ticker(), MarketRules.forInstrument(instrument));
             CircuitBreaker breaker = config.preset().newCircuitBreaker(instrument.referencePrice());
             if (breaker != null) {
@@ -453,7 +472,7 @@ public final class RunningRound {
             history = warmup.generateHistory(universe, fundamentals, 60L, 60L, 1_700_000_000L);
             // Open each instrument at its warmed-up fundamental so books and circuit breakers
             // start consistent with the market rather than at the stale reference price.
-            for (Instrument instrument : universe.all()) {
+            for (Instrument instrument : universe.spots()) {
                 String symbol = instrument.ticker();
                 double open = fundamentals.fundamental(symbol);
                 engines.get(symbol).setLastPrice(open);
@@ -463,17 +482,27 @@ public final class RunningRound {
                     breakers.put(symbol, config.preset().newCircuitBreaker(open));
                 }
             }
-            warmup.seedBooks(engines.values(), fundamentals,
+            // Series books start empty: the market-maker quotes them once continuous
+            // trading begins, so warm-up only seeds spot books.
+            List<InstrumentEngine> spotEngines = engines.values().stream()
+                    .filter(engine -> !SeriesSymbols.isSeriesSymbol(engine.symbol()))
+                    .toList();
+            warmup.seedBooks(spotEngines, fundamentals,
                     rivals.isEmpty() ? institutions.get(0).id() : rivals.get(0).id());
             warmedUp = true;
             // Anchor the live-bar axis on the history it continues: live window w closes at
-            // lastHistoryTime + (w + 1) * barSeconds.
+            // lastHistoryTime + (w + 1) * barSeconds. Symbols without history (series
+            // books, which start empty) anchor to the shared history end instead.
+            long historyEndSec = 1_700_000_000L;
             for (Map.Entry<String, List<Bar>> entry : history.entrySet()) {
                 List<Bar> bars = entry.getValue();
                 if (!bars.isEmpty()) {
-                    barBaseSec.put(entry.getKey(), bars.get(bars.size() - 1).timeSec());
+                    long last = bars.get(bars.size() - 1).timeSec();
+                    barBaseSec.put(entry.getKey(), last);
+                    historyEndSec = Math.max(historyEndSec, last);
                 }
             }
+            this.historyEndSec = historyEndSec;
         }
         session.begin();
         lifecycle.transitionTo(RoundState.RUNNING);
@@ -530,7 +559,8 @@ public final class RunningRound {
         Map<String, NewsSignal> signals = routeReleases(newsEvents, sectorByTicker, indexTicker);
 
         if (session.phase() == SessionPhase.CONTINUOUS) {
-            for (Instrument instrument : universe.all()) {
+            // Makers quote spot books; takers trade them. Rivals stay equities-only.
+            for (Instrument instrument : universe.spots()) {
                 String symbol = instrument.ticker();
                 InstrumentEngine engine = engines.get(symbol);
                 double fundamental = fundamentals.fundamental(symbol);
@@ -549,6 +579,20 @@ public final class RunningRound {
                     long netPosition = runner.participant().account().position(symbol).netQty();
                     events.addAll(runner.act(engine, fundamental, vol, change, netPosition, tick, equity,
                             toxicity(symbol), signals.get(symbol),
+                            fill -> applyFill(fill, symbol, events, tick)));
+                }
+            }
+            // Makers quote the liquid series subset around derived references; takers
+            // never touch series books, so rival strategies stay equities-only.
+            Map<String, Double> seriesMarks = marks();
+            double yearsLeft = Math.max(0L, sessionTicks - tick) * stepMillis / (double) YEAR_MILLIS;
+            for (String symbol : quotedSeries) {
+                InstrumentEngine engine = engines.get(symbol);
+                double reference = seriesReference(symbol, yearsLeft);
+                for (BotRunner runner : runners) {
+                    long netPosition = runner.participant().account().position(symbol).netQty();
+                    double equity = runner.participant().account().equity(seriesMarks);
+                    events.addAll(runner.quoteSeries(engine, reference, netPosition, tick, equity,
                             fill -> applyFill(fill, symbol, events, tick)));
                 }
             }
@@ -611,7 +655,7 @@ public final class RunningRound {
 
     /** A closed window as the wire-ready bar event, timed on the history axis. */
     private GameEvent.BarClosed closedBar(String symbol, BarAccumulator acc) {
-        long base = barBaseSec.getOrDefault(symbol, 1_700_000_000L);
+        long base = barBaseSec.getOrDefault(symbol, historyEndSec);
         return new GameEvent.BarClosed(symbol, barInterval(), base + (acc.window + 1L) * barSeconds,
                 acc.open, acc.high, acc.low, acc.close, acc.volume, acc.window * BAR_TICKS);
     }
@@ -712,10 +756,13 @@ public final class RunningRound {
         creditFill(fill.makerParticipantId(), symbol, fill.makerSide(), fill.quantity(), fill.price(),
                 events, tick);
         // The taker is the aggressor: buy flow positive, sell flow negative.
+        // Series flow stays out of the spot fundamental (no cross-market impact in v1).
         double signed = fill.takerSide() == com.virtualinvestor.core.domain.OrderSide.BUY
                 ? fill.quantity() : -fill.quantity();
-        netFlow.merge(symbol, signed, Double::sum);
-        cumulativeFlow.merge(symbol, signed, Double::sum);
+        if (!SeriesSymbols.isSeriesSymbol(symbol)) {
+            netFlow.merge(symbol, signed, Double::sum);
+            cumulativeFlow.merge(symbol, signed, Double::sum);
+        }
     }
 
     /** Credit one counterparty of a fill and publish its position and account. */
@@ -723,15 +770,28 @@ public final class RunningRound {
             com.virtualinvestor.core.domain.OrderSide side, long quantity, double price,
             List<GameEvent> events, long tick) {
         com.virtualinvestor.core.participant.Account account = participant(participantId).account();
-        account.applyFill(symbol, side, quantity, price);
+        Optional<SeriesSymbols.SeriesTerms> series = SeriesSymbols.parse(symbol);
+        if (series.isPresent() && series.get().kind() == SeriesSymbols.SeriesKind.FUTURE) {
+            double marginPerContract = marketRules.get(symbol).initialMarginFraction() * price;
+            account.applyFuturesFill(symbol, side, quantity, price, marginPerContract);
+        } else if (series.isPresent()) {
+            account.applyOptionFill(symbol, side, quantity, price);
+        } else {
+            account.applyFill(symbol, side, quantity, price);
+        }
         // Broker tariffs (player-accounts 5.1): each counterparty pays its own bank's
-        // schedule on the fill, deducted from cash and accumulated visibly as fees paid.
-        account.debitFee(feesFor(participantId).feeFor(quantity));
+        // schedule on the fill — percentage of notional for series — deducted from
+        // cash and accumulated visibly as fees paid.
+        if (series.isPresent()) {
+            account.debitFee(feesFor(participantId).feeForSeries(quantity, quantity * price));
+        } else {
+            account.debitFee(feesFor(participantId).feeFor(quantity));
+        }
         com.virtualinvestor.core.participant.Position position = account.position(symbol);
         events.add(new GameEvent.PositionUpdated(participantId, symbol, position.netQty(),
-                position.avgPrice(), position.realized(), tick));
+                position.avgPrice(), position.realized(), account.lockedFor(symbol), tick));
         events.add(new GameEvent.AccountUpdated(participantId, account.cash(), account.realizedPnl(),
-                account.feesPaid(), tick));
+                account.feesPaid(), account.lockedMargin(), tick));
     }
 
     private static List<GameEvent> rejected(Command.PlaceOrder place, String reason, long tick) {
@@ -749,6 +809,11 @@ public final class RunningRound {
         }
         if (command instanceof Command.PlaceOrder place) {
             SessionPhase phase = session.phase();
+            Optional<SeriesSymbols.SeriesTerms> seriesTerms = SeriesSymbols.parse(place.symbol());
+            if (seriesTerms.isPresent() && phase != SessionPhase.CONTINUOUS) {
+                return rejected(place, "series " + place.symbol()
+                        + " trades in continuous trading only", tick);
+            }
             if (phase == SessionPhase.OPENING_AUCTION || phase == SessionPhase.CLOSING_AUCTION) {
                 Auction auction = activeAuctions.get(place.symbol());
                 if (auction != null) {
@@ -765,14 +830,39 @@ public final class RunningRound {
             if (phase != SessionPhase.CONTINUOUS) {
                 return rejected(place, "market is not in continuous trading", tick);
             }
+            if (!engines.containsKey(place.symbol())) {
+                return rejected(place, "unknown instrument " + place.symbol(), tick);
+            }
             CircuitBreaker breaker = breakers.get(place.symbol());
             if (breaker != null && breaker.isHalted(tick)) {
                 return rejected(place, "instrument is halted", tick);
+            }
+            if (seriesTerms.isPresent()) {
+                CircuitBreaker underlying = breakers.get(seriesTerms.get().underlying());
+                if (underlying != null && underlying.isHalted(tick)) {
+                    return rejected(place, "underlying " + seriesTerms.get().underlying() + " is halted",
+                            tick);
+                }
             }
             ValidationResult validation = OrderValidator.validate(
                     marketRules.get(place.symbol()), place.side(), place.type(), place.price(), place.quantity());
             if (!validation.valid()) {
                 return rejected(place, validation.reason(), tick);
+            }
+            if (seriesTerms.isPresent()) {
+                com.virtualinvestor.core.participant.Account account =
+                        participant(place.participantId()).account();
+                Map<String, Double> liveMarks = marks();
+                double price = place.price();
+                if (!Double.isFinite(price) || price <= 0.0) {
+                    price = engines.get(place.symbol()).lastPrice();
+                }
+                ValidationResult sized = OrderValidator.checkSeriesSize(seriesTerms.get(), place.side(),
+                        place.quantity(), price, account.equity(liveMarks),
+                        account.buyingPower(), marketRules.get(place.symbol()).initialMarginFraction());
+                if (!sized.valid()) {
+                    return rejected(place, sized.reason(), tick);
+                }
             }
             long netPosition = participant(place.participantId()).account().position(place.symbol()).netQty();
             ValidationResult shorting = shortPolicies.get(place.symbol())
@@ -855,6 +945,46 @@ public final class RunningRound {
             marks.put(instrument.ticker(), engines.get(instrument.ticker()).lastPrice());
         }
         return marks;
+    }
+
+    /**
+     * The liquid series subset makers quote: every future plus, per equity, the calls
+     * and puts within one strike step of the listing ATM. Deterministic per universe.
+     */
+    static java.util.Set<String> quotedSeries(InstrumentUniverse universe) {
+        java.util.Set<String> quoted = new java.util.LinkedHashSet<>();
+        for (Instrument equity : universe.equities()) {
+            quoted.add(SeriesSymbols.futureSymbol(equity.ticker()));
+            double tick = equity.tickSize();
+            double step = SeriesLister.strikeStep(equity.referencePrice(), tick);
+            double atm = SeriesLister.atmStrike(equity.referencePrice(), tick);
+            for (int offset = -1; offset <= 1; offset++) {
+                double strike = Math.rint((atm + offset * step) / tick) * tick;
+                if (strike > 0.0) {
+                    quoted.add(SeriesSymbols.callSymbol(equity.ticker(), strike));
+                    quoted.add(SeriesSymbols.putSymbol(equity.ticker(), strike));
+                }
+            }
+        }
+        universe.index().ifPresent(index -> quoted.add(SeriesSymbols.futureSymbol(index.ticker())));
+        return quoted;
+    }
+
+    /** Derived quoting reference for a series: spot for futures, formula premium for options. */
+    private double seriesReference(String symbol, double yearsLeft) {
+        SeriesSymbols.SeriesTerms terms = SeriesSymbols.parse(symbol)
+                .orElseThrow(() -> new IllegalArgumentException("not a listed series: " + symbol));
+        double spot = engines.get(terms.underlying()).lastPrice();
+        if (terms.kind() == SeriesSymbols.SeriesKind.FUTURE) {
+            return SeriesMarks.futuresReference(spot);
+        }
+        double volatility = universe.find(terms.underlying())
+                .map(Instrument::baseVolatility)
+                .orElse(0.4);
+        if (terms.kind() == SeriesSymbols.SeriesKind.CALL) {
+            return OptionPricing.call(spot, terms.strike(), yearsLeft, volatility);
+        }
+        return OptionPricing.put(spot, terms.strike(), yearsLeft, volatility);
     }
 
     public Map<String, List<Bar>> history() {

@@ -35,7 +35,7 @@ public final class PlayerStore {
     }
 
     public record Bank(String bankId, String displayName, double feePerShare, double ticketMinimum,
-            double custodyRate) {
+            double custodyRate, double seriesRate, double seriesMinimum) {
     }
 
     public record Purse(double cash, double feesPaid, Map<String, Holding> holdings) {
@@ -401,13 +401,14 @@ public final class PlayerStore {
     public java.util.List<Bank> banks() {
         try (Connection connection = dataSource.getConnection();
                 PreparedStatement statement = connection.prepareStatement(
-                        "SELECT bank_id, display_name, fee_per_share, ticket_minimum, custody_rate"
+                        "SELECT bank_id, display_name, fee_per_share, ticket_minimum, custody_rate,"
+                                + " series_rate, series_minimum"
                                 + " FROM banks ORDER BY bank_id")) {
             try (ResultSet rows = statement.executeQuery()) {
                 java.util.List<Bank> banks = new java.util.ArrayList<>();
                 while (rows.next()) {
                     banks.add(new Bank(rows.getString(1), rows.getString(2), rows.getDouble(3),
-                            rows.getDouble(4), rows.getDouble(5)));
+                            rows.getDouble(4), rows.getDouble(5), rows.getDouble(6), rows.getDouble(7)));
                 }
                 return banks;
             }
@@ -419,7 +420,8 @@ public final class PlayerStore {
     public Optional<Bank> bank(String bankId) {
         try (Connection connection = dataSource.getConnection();
                 PreparedStatement statement = connection.prepareStatement(
-                        "SELECT bank_id, display_name, fee_per_share, ticket_minimum, custody_rate"
+                        "SELECT bank_id, display_name, fee_per_share, ticket_minimum, custody_rate,"
+                                + " series_rate, series_minimum"
                                 + " FROM banks WHERE bank_id = ?")) {
             statement.setString(1, bankId);
             try (ResultSet rows = statement.executeQuery()) {
@@ -427,7 +429,7 @@ public final class PlayerStore {
                     return Optional.empty();
                 }
                 return Optional.of(new Bank(rows.getString(1), rows.getString(2), rows.getDouble(3),
-                        rows.getDouble(4), rows.getDouble(5)));
+                        rows.getDouble(4), rows.getDouble(5), rows.getDouble(6), rows.getDouble(7)));
             }
         } catch (SQLException e) {
             throw new IllegalStateException("bank lookup failed", e);

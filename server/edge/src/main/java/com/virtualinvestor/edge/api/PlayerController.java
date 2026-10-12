@@ -43,7 +43,7 @@ public class PlayerController {
     }
 
     public record BankResponse(String bankId, String displayName, double feePerShare, double ticketMinimum,
-            double custodyRate) {
+            double custodyRate, double seriesRate, double seriesMinimum) {
     }
 
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(PlayerController.class);
@@ -92,7 +92,7 @@ public class PlayerController {
     public List<BankResponse> banks() {
         return players.store().banks().stream()
                 .map(bank -> new BankResponse(bank.bankId(), bank.displayName(), bank.feePerShare(),
-                        bank.ticketMinimum(), bank.custodyRate()))
+                        bank.ticketMinimum(), bank.custodyRate(), bank.seriesRate(), bank.seriesMinimum()))
                 .toList();
     }
 

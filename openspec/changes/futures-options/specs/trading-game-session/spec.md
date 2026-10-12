@@ -7,9 +7,9 @@
 On realism presets that enable margin, the system SHALL issue a margin call and
 liquidate positions when a participant's equity falls below the maintenance
 requirement. Equity for the call SHALL include futures variation and option
-market value; liquidation SHALL close derivative positions (futures at current
-series price, options at current premium or intrinsic) alongside equity
-positions until the requirement is restored.
+market value; liquidation SHALL flatten every position, closing the most levered
+exposure first (futures at current series price, options at current premium or
+intrinsic, alongside equity positions).
 
 #### Scenario: Position liquidated on margin call
 
@@ -19,8 +19,8 @@ positions until the requirement is restored.
 #### Scenario: Derivatives liquidated first when most levered
 
 - **WHEN** a margin call fires on an account whose largest exposure is futures
-- **THEN** liquidation reduces the futures exposure before touching
-  unencumbered equity positions
+- **THEN** the futures position closes before equity positions; a call still
+  flattens every position
 
 ### Requirement: Session settlement
 

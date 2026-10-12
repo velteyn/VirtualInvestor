@@ -42,7 +42,7 @@ public final class WarmupGenerator {
         if (barCount <= 0L || barTicks <= 0L) {
             throw new IllegalArgumentException("barCount and barTicks must be positive");
         }
-        List<Instrument> instruments = universe.all();
+        List<Instrument> instruments = universe.spots();
         Map<String, List<Bar>> history = new LinkedHashMap<>();
         for (Instrument instrument : instruments) {
             history.put(instrument.ticker(), new ArrayList<>());

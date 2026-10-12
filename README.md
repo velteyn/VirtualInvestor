@@ -10,7 +10,10 @@ or with friends in lobby rooms. Sessions are durable and resumable.
 
 ## What you get
 
-- **A market that behaves like one**: 21 instruments, laddered order books,
+- **A market that behaves like one**: 21 spot instruments plus listed
+  derivatives (one future per underlying, European calls and puts at ATM ± 3
+  strikes, all expiring cash-settled at the closing bell), laddered order
+  books,
   toxicity-aware market makers that fade and requote, momentum/value/scalper
   rivals, a news-reading hunter and a macro desk that trade headlines with
   human-like delay — plus earnings surprises, rumors that confirm or deny, and
@@ -19,6 +22,13 @@ or with friends in lobby rooms. Sessions are durable and resumable.
   socket, fees and buying-power guards, short selling with policy, margin
   floors, circuit breakers, per-symbol realized gains and fill history with
   markouts.
+- **Leverage and convexity**: futures with locked margin (20% default) and
+  mark-to-market equity, long/short calls and puts with premium settlement and
+  automatic exercise — all deterministic and replay-exact, all flattened at
+  the bell.
+- **A portfolio in sections**: one tab with Shares / Futures / Calls / Puts
+  sections — futures show margin and variation, options show strike,
+  intrinsic/time split, moneyness and payoff — under a unified account header.
 - **Multiplayer rooms**: lobby with live games, 6-seat rooms, master start,
   backfill bots for empty seats, locked rosters once the clock runs.
 - **Deterministic**: same seed, same market — every session is reproducible,
@@ -96,7 +106,9 @@ services restart automatically after a Docker daemon restart
 3. **Single-player session**: pick capital / length / preset and start — the
    terminal opens and the clock runs at once.
 4. **Trade** NVDO (or click any watchlist row to chart PEAR, VOLT, TRLL,
-   SOCL): set quantity in the ticket, Buy/Sell, Transmit. New sessions open
+   SOCL): set quantity in the ticket, Buy/Sell, Transmit. Use the ticket's
+   Series picker for futures and options (margin/premium preview included).
+   New sessions open
    with a pre-open and auction phase — the ticket tells you when the market
    turns continuous (~2 minutes on a 30-minute game).
 5. Watch **Rivals** (leaderboard), **News** (the wire that moves prices),
@@ -140,6 +152,7 @@ a browser:
 ```bash
 cd server && mvn test          # full server suite (core → edge)
 cd server && mvn -pl runtime -am test -Dtest=MarketRealismTest   # market watch
+cd web && npm test             # terminal unit tests (Vitest)
 cd web && npm run build        # typecheck + production build
 ```
 

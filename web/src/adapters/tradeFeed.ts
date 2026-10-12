@@ -22,12 +22,14 @@ export interface LivePosition {
   netQty: number;
   avgPrice: number;
   realized: number;
+  locked: number;
 }
 
 export interface LiveAccount {
   cash: number;
   realizedPnl: number;
   feesPaid: number;
+  lockedMargin: number;
 }
 
 export interface TradeState {
@@ -90,14 +92,14 @@ export class VirtualInvestorTradeFeed {
         this.positions.delete(symbol);
       } else {
         this.positions.set(symbol,
-          { symbol, netQty, avgPrice: Number(payload.avgPrice), realized: Number(payload.realized ?? 0) });
+          { symbol, netQty, avgPrice: Number(payload.avgPrice), realized: Number(payload.realized ?? 0), locked: Number(payload.locked ?? 0) });
       }
       this.emit();
     } else if (payload.type === 'account') {
       this.account = { cash: Number(payload.cash), realizedPnl: Number(payload.realizedPnl ?? 0),
-        feesPaid: Number(payload.feesPaid ?? 0) };
+        feesPaid: Number(payload.feesPaid ?? 0), lockedMargin: Number(payload.lockedMargin ?? 0) };
       // eslint-disable-next-line no-console
-      console.info(`[vi] account cash=${payload.cash} realized=${payload.realizedPnl ?? 0} fees=${payload.feesPaid ?? 0}`);
+      console.info(`[vi] account cash=${payload.cash} realized=${payload.realizedPnl ?? 0} fees=${payload.feesPaid ?? 0} locked=${payload.lockedMargin ?? 0}`);
       this.emit();
     }
   }
