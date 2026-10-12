@@ -19,6 +19,17 @@ The server SHALL broadcast, as the world produces them, bars, trade prints, mark
 - **WHEN** the news engine releases an item
 - **THEN** subscribers receive a news frame with its source, scope and text
 
+#### Scenario: Frames stay inside their round
+
+- **WHEN** two rounds run and a socket joined only round A
+- **THEN** it receives no bars, prints, depth, orders, positions, account
+  readings or news from round B
+
+#### Scenario: Re-join rebinds the socket
+
+- **WHEN** a socket joins round B after round A
+- **THEN** round A frames stop and round B frames start, with no cross-talk
+
 ### Requirement: Coalesced depth
 
 Depth updates for one instrument SHALL be coalesced within a short window so a fast book does not flood subscribers; the latest winning update SHALL be the one delivered.

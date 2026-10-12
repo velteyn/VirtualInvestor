@@ -7,7 +7,13 @@ Defines the browser trading terminal: its layout and panels, how each panel is f
 
 ### Requirement: Live terminal layout
 
-The terminal SHALL present a single screen with a candlestick chart (carrying the market overlays) on the left, a right column stacked with the rivals leaderboard, watchlist and news panels, and an order ticket and positions strip along the bottom.
+The terminal SHALL present a single screen: on the left, a candlestick chart
+(carrying the market overlays) above a tabbed dock (Positions, Portfolio,
+company, News) — the wire and its full-story articles share the single News
+tab, with no separate newsroom tab; on the right, a full-height sidebar holding
+the rivals leaderboard, the watchlist, and the order ticket down to the
+footer. The page SHALL NOT scroll: the sidebar and the dock scroll internally
+within the viewport height.
 
 #### Scenario: Terminal opens on a running round
 
@@ -18,6 +24,23 @@ The terminal SHALL present a single screen with a candlestick chart (carrying th
 
 - **WHEN** the round is running
 - **THEN** the chart shows live bars, the rivals show live standings, the watchlist shows live prices, and the news panel shows wire headlines
+
+#### Scenario: Sidebar spans full height
+
+- **WHEN** the terminal is open on a wide screen
+- **THEN** rivals, watchlist and ticket stack in a right sidebar reaching the
+  footer, and no page-level scrollbar appears
+
+#### Scenario: News wire lives in the dock
+
+- **WHEN** the player opens the dock tabs
+- **THEN** a News tab shows the same wire headlines previously stacked in the
+  sidebar
+
+#### Scenario: One news tab, not two
+
+- **WHEN** the player opens the dock tabs
+- **THEN** exactly one News tab appears, and full stories open from its rows
 
 ### Requirement: Chart is fed by the live stream
 
@@ -53,7 +76,9 @@ The terminal SHALL show the rivals leaderboard as a ranked list of participants 
 
 ### Requirement: Order entry from the terminal
 
-The player SHALL place orders from the terminal — market or limit, buy or sell, with a quantity — through a dedicated order ticket and the chart's order menu, and SHALL be able to attach a stop-loss and take-profit bracket.
+The player SHALL place orders from the terminal — market or limit, buy or sell, with a quantity — through a dedicated order ticket and the chart's order menu, and SHALL be able to attach a stop-loss and take-profit bracket. The terminal
+SHALL additionally offer futures and option series selection with premium and
+margin previewed in the ticket, without bracket attachment on derivative legs.
 
 #### Scenario: Place a market order
 
@@ -70,9 +95,18 @@ The player SHALL place orders from the terminal — market or limit, buy or sell
 - **WHEN** the player submits an order the server refuses (off-tick price, halted instrument, insufficient buying power)
 - **THEN** the terminal reports the reason and shows no working order
 
+#### Scenario: Derivative order placed from terminal
+
+- **WHEN** the player selects a futures or option series and confirms the ticket
+- **THEN** the order is submitted with that series symbol and shown values
+
 ### Requirement: Manage working orders and positions
 
-The terminal SHALL let the player modify a working order by dragging its line, cancel it, and close a position, and SHALL reflect the results from the server's order and position streams.
+The terminal SHALL let the player modify a working order by dragging its line, cancel it, and close a position, and SHALL reflect the results from the server's order and position streams. Derivative positions SHALL show expiry
+marking and live mark-to-market or premium value, and SHALL close through the
+same action with settlement results reflected from the streams. Position rows
+SHALL use kind-appropriate values everywhere they appear: variation for
+futures, premium MTM for options, and an expiry mark for all series.
 
 #### Scenario: Drag to modify
 
@@ -83,6 +117,18 @@ The terminal SHALL let the player modify a working order by dragging its line, c
 
 - **WHEN** the player closes a position
 - **THEN** the server flattens it and the position and P&L update from the stream
+
+#### Scenario: Expiring position visible and closable
+
+- **WHEN** the player holds a series expiring at the bell
+- **THEN** the position shows its expiry and MTM or premium, and closing it
+  reflects the server result
+
+#### Scenario: Futures row shows variation, not notional
+
+- **WHEN** the player holds a future with entry far below the mark
+- **THEN** every position display shows the MTM variation, never the leveraged
+  notional value
 
 ### Requirement: Orders travel over the WebSocket
 
@@ -100,9 +146,16 @@ The terminal SHALL submit `placeOrder`, `modifyOrder` and `cancelOrder` commands
 
 ### Requirement: Live account and P&L
 
-The terminal SHALL show the player's cash, buying power and open positions with live unrealized P&L, updating from the account and position streams.
+The terminal SHALL show the player's cash, buying power and open positions with live unrealized P&L, updating from the account and position streams. The
+display SHALL break out locked margin, futures variation, and option market
+value so levered P&L is explainable at a glance.
 
 #### Scenario: P&L updates on a tick
 
 - **WHEN** the price of a held instrument moves
 - **THEN** the position's unrealized P&L updates in the terminal
+
+#### Scenario: Margin breakout visible
+
+- **WHEN** the player holds margined derivatives
+- **THEN** the account shows locked margin alongside free cash and buying power

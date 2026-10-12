@@ -25,18 +25,28 @@ and SHALL require the player to choose one before the account is created.
 ### Requirement: Published fee schedules
 
 Each bank SHALL publish a per-share commission, a minimum fee per ticket, and
-an optional custody rate, all visible to the player before choosing.
+an optional custody rate, all visible to the player before choosing. Each bank
+SHALL additionally publish a percentage commission on notional and ticket minimum
+for futures and for options, visible alongside the equity terms before choosing.
 
 #### Scenario: Terms visible before choice
 
 - **WHEN** a player views the bank list
 - **THEN** each bank shows its per-share commission, ticket minimum and custody terms
 
+#### Scenario: Derivatives terms visible before choice
+
+- **WHEN** a player views the bank list
+- **THEN** each bank shows its percentage futures and options commissions
+  and ticket minima alongside equity terms
+
 ### Requirement: Deterministic per-execution deduction
 
 Every fill SHALL deduct `max(ticket minimum, per-share commission x filled
 quantity)` in cash from the executing participant, as a pure function of the
-fill, identically for humans and bots.
+fill, identically for humans and bots. Fills in derivative series SHALL deduct
+`max(series ticket minimum, percentage rate x notional value)` under
+the same determinism and replay identity.
 
 #### Scenario: Commission on a fill
 
@@ -47,6 +57,12 @@ fill, identically for humans and bots.
 
 - **WHEN** the same fill is replayed from the event log
 - **THEN** the deducted fee is identical to the original run
+
+#### Scenario: Commission on a futures fill
+
+- **WHEN** a 5-contract futures fill with 10,000 notional executes for a bank
+  charging 0.1% with a 1.00 minimum
+- **THEN** exactly 10.00 is deducted from that participant's cash
 
 ### Requirement: Visible fee totals
 
