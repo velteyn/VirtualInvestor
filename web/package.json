@@ -15,6 +15,7 @@
     "openalgo-charts": "^2.6.0"
   },
   "devDependencies": {
+    "happy-dom": "^21.0.1",
     "typescript": "^5.7.3",
     "vite": "^6.0.7",
     "vitest": "^5.0.3"
