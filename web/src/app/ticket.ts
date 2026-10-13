@@ -205,7 +205,55 @@ export function ladderRows(
     .sort((a, b) => a.strike - b.strike);
 }
 
-export type TicketMode = 'SHARES' | 'FUTURES' | 'OPTIONS';export function maxAffordableSeries(
+export type TicketMode = 'SHARES' | 'FUTURES' | 'OPTIONS';
+
+/** Firing rules for the confirm dialog (fixed v1 thresholds). */
+export type ConfirmRule = 'SIZE' | 'MARGIN' | 'OFFMARKET';
+
+export const CONFIRM_SIZE_FRACTION = 0.25;
+export const CONFIRM_OFFMARKET_FRACTION = 0.05;
+export const TRANSMIT_LOCK_TIMEOUT_MS = 5000;
+
+export function needsConfirm(input: {
+  notional: number;
+  buyingPower: number;
+  margined: boolean;
+  offTouchFraction: number;
+}): ConfirmRule[] {
+  const rules: ConfirmRule[] = [];
+  if (input.buyingPower > 0 && input.notional > CONFIRM_SIZE_FRACTION * input.buyingPower) {
+    rules.push('SIZE');
+  }
+  if (input.margined) {
+    rules.push('MARGIN');
+  }
+  if (input.offTouchFraction > CONFIRM_OFFMARKET_FRACTION) {
+    rules.push('OFFMARKET');
+  }
+  return rules;
+}
+
+export interface TransmitLock {
+  locked: boolean;
+  token: string | null;
+}
+
+export function lockFor(token: string): TransmitLock {
+  return { locked: true, token };
+}
+
+/** Release on the lock's own terminal report or its timeout; foreign events keep it. */
+export function releaseOn(
+  lock: TransmitLock,
+  event: 'filled' | 'cancelled' | 'rejected' | 'timeout',
+  token: string,
+): TransmitLock {
+  void event;
+  if (!lock.locked || lock.token !== token) {
+    return lock;
+  }
+  return { locked: false, token: null };
+}export function maxAffordableSeries(
   side: 'BUY' | 'SELL',
   price: number,
   meta: SeriesMeta,
@@ -327,7 +375,18 @@ export function mountTicket(
     <label data-price="stop" hidden>Stop <input id="vi-tk-stop" inputmode="decimal" /></label>
     <div id="vi-tk-preview" class="vi-tk-preview"></div>
     <button id="vi-tk-send">Transmit</button>
-    <p id="vi-tk-error" class="vi-error" role="alert"></p>`;
+    <p id="vi-tk-error" class="vi-error" role="alert"></p>
+    <div id="vi-tk-confirm" class="vi-confirm" hidden>
+      <div class="vi-confirm-card" role="dialog" aria-modal="true">
+        <h3>Confirm order</h3>
+        <div class="vi-confirm-lines"></div>
+        <div class="vi-confirm-reasons"></div>
+        <div class="vi-confirm-actions">
+          <button id="vi-tk-ok">Confirm</button>
+          <button id="vi-tk-no">Cancel</button>
+        </div>
+      </div>
+    </div>`;
   column.appendChild(section);
 
   const sideButtons = [...section.querySelectorAll<HTMLButtonElement>('[data-side]')];
@@ -338,6 +397,11 @@ export function mountTicket(
   const preview = section.querySelector<HTMLDivElement>('#vi-tk-preview')!;
   const send = section.querySelector<HTMLButtonElement>('#vi-tk-send')!;
   const error = section.querySelector<HTMLParagraphElement>('#vi-tk-error')!;
+  const confirmBox = section.querySelector<HTMLDivElement>('#vi-tk-confirm')!;
+  const confirmLines = section.querySelector<HTMLDivElement>('.vi-confirm-lines')!;
+  const confirmReasons = section.querySelector<HTMLDivElement>('.vi-confirm-reasons')!;
+  const confirmOk = section.querySelector<HTMLButtonElement>('#vi-tk-ok')!;
+  const confirmNo = section.querySelector<HTMLButtonElement>('#vi-tk-no')!;
 
   let side: 'BUY' | 'SELL' = 'BUY';
 
@@ -643,8 +707,22 @@ export function mountTicket(
     return command;
   };
 
-  // Fee preview with buying-power guard (order-ticket 1.4): mirrors the server
-  // formula so the preview never lies; Transmit disables over buying power.
+  // Transmit lock (ticket-transmit-safety): the button stays dead from click
+  // to the order's terminal report or timeout, so raid-clicks cannot duplicate.
+  let lock: TransmitLock = { locked: false, token: null };
+  let guardOff = false;
+  let lockTimer = 0;
+  const updateSend = (): void => {
+    send.disabled = lock.locked || guardOff;
+  };
+  const unlock = (token: string): void => {
+    const next = releaseOn(lock, 'filled', token);
+    if (next !== lock) {
+      lock = next;
+      window.clearTimeout(lockTimer);
+      updateSend();
+    }
+  };
   let bank: BankTerms | null = null;
   void client.banks().then((banks) => {
     const mine = banks.find((b) => b.bankId === client.bankOfPlayer()) ?? banks[0];
@@ -667,13 +745,15 @@ export function mountTicket(
     const price = needsPrice ? Number((type === 'STOP' ? stop : limit).value) : touchPrice();
     if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(price) || price <= 0) {
       preview.textContent = '';
-      send.disabled = false;
+      guardOff = false;
+      updateSend();
       return;
     }
     const cash = tradeFeed.state().account?.cash ?? 0;
     if (bank === null) {
       preview.textContent = `${side} ${quantity} ${symbol()} @ ${price.toFixed(2)} = $${(quantity * price).toFixed(0)}`;
-      send.disabled = false;
+      guardOff = false;
+      updateSend();
       return;
     }
     const meta = seriesMeta();
@@ -685,7 +765,8 @@ export function mountTicket(
       preview.textContent =
         `${side} ${quantity} ${symbol()} @ ${price.toFixed(2)} = $${series.notional.toFixed(0)}`
         + ` + $${series.fee.toFixed(2)} fee + $${series.lock.toFixed(0)} ${kindLabel} → $${left.toFixed(0)} left`;
-      send.disabled = !series.affordable;
+      guardOff = !series.affordable;
+      updateSend();
       error.textContent = series.affordable ? '' : series.reason;
       return;
     }
@@ -694,7 +775,8 @@ export function mountTicket(
     preview.textContent =
       `${side} ${quantity} ${symbol()} @ ${price.toFixed(2)} = $${quote.cost.toFixed(0)}`
       + ` + $${quote.fee.toFixed(2)} fee → $${left.toFixed(0)} left`;
-    send.disabled = !quote.affordable;
+  guardOff = !quote.affordable;
+  updateSend();
     error.textContent = quote.affordable ? '' : `needs $${quote.total.toFixed(0)}, have $${cash.toFixed(0)}`;
   };
   const refresh = (): void => {
@@ -726,11 +808,111 @@ export function mountTicket(
     const status = String(payload.status ?? '');
     if (status === 'FILLED' || status === 'CANCELLED' || status === 'REJECTED') {
       ownOrders.delete(payload.orderId);
+      unlock(String(payload.orderId));
     }
   });
 
+  const RULE_LABELS: Record<string, string> = {
+    SIZE: 'large order (over 25% of buying power)',
+    MARGIN: 'margined position',
+    OFFMARKET: 'price far off touch (fat-finger check)',
+  };
+
+  /** Economics snapshot for the confirm dialog, mirroring the preview math. */
+  const econOf = (command: OrderCommand): {
+    notional: number; fee: number; lock: number; left: number; buyingPower: number;
+  } => {
+    const price = command.price ?? touchPrice();
+    const quantity = command.quantity;
+    const meta = seriesMeta();
+    const { buyingPower } = funds();
+    if (meta !== null && bank !== null) {
+      const series = previewSeries(quantity, price, command.side, meta, bank,
+        funds().equity, buyingPower);
+      return {
+        notional: series.notional, fee: series.fee, lock: series.lock,
+        left: buyingPower - series.need, buyingPower,
+      };
+    }
+    const cost = quantity * price;
+    const fee = bank === null ? 0 : Math.max(bank.ticketMinimum, bank.feePerShare * quantity);
+    const cash = tradeFeed.state().account?.cash ?? 0;
+    return { notional: cost, fee, lock: 0, left: cash - cost - fee, buyingPower: cash };
+  };
+
+  const reviewOf = (command: OrderCommand): { rules: string[] } => {
+    const price = command.price ?? touchPrice();
+    const meta = seriesMeta();
+    const { buyingPower } = funds();
+    const margined = (meta !== null && meta.kind === 'FUTURE') || command.side === 'SELL';
+    const notional = meta === null
+      ? price * command.quantity
+      : meta.kind === 'FUTURE' || command.side === 'BUY'
+        ? price * command.quantity
+        : meta.strike * command.quantity;
+    const touch = touchPrice();
+    const offTouch = command.type !== 'MARKET' && touch > 0 && price > 0
+      ? Math.abs(price - touch) / touch
+      : 0;
+    const rules = needsConfirm({ notional, buyingPower, margined, offTouchFraction: offTouch });
+    return { rules };
+  };
+
+  const closeDialog = (): void => {
+    confirmBox.hidden = true;
+  };
+
+  const doTransmit = (command: OrderCommand): void => {
+    rememberQty(storage, symbol(), command.quantity);
+    ownOrders.add(command.clientToken);
+    lock = lockFor(command.clientToken);
+    window.clearTimeout(lockTimer);
+    lockTimer = window.setTimeout(() => {
+      lock = releaseOn(lock, 'timeout', command.clientToken);
+      updateSend();
+    }, TRANSMIT_LOCK_TIMEOUT_MS);
+    updateSend();
+    // eslint-disable-next-line no-console
+    console.info(`[vi] transmit ${command.side} ${command.quantity} ${command.symbol} ${command.type}`);
+    client.placeOrder(round.roundId, participant, command);
+  };
+
+  const askConfirm = (command: OrderCommand, rules: string[]): void => {
+    const econ = econOf(command);
+    const price = command.price ?? touchPrice();
+    confirmLines.innerHTML =
+      `<div>${command.side} ${command.quantity} ${command.symbol}`
+      + ` @ ${Number.isFinite(price) && price > 0 ? price.toFixed(2) : 'market'}</div>`
+      + `<div>Notional $${econ.notional.toFixed(0)} + $${econ.fee.toFixed(2)} fee`
+      + (econ.lock > 0 ? ` + $${econ.lock.toFixed(0)} locked` : '')
+      + ` → $${econ.left.toFixed(0)} left</div>`;
+    confirmReasons.innerHTML = rules
+      .map((rule) => `<div>• ${RULE_LABELS[rule] ?? rule}</div>`).join('');
+    confirmBox.hidden = false;
+    const onOk = (): void => {
+      confirmOk.removeEventListener('click', onOk);
+      closeDialog();
+      const fresh = read();
+      if (fresh === null) {
+        return;
+      }
+      doTransmit(fresh);
+    };
+    const onNo = (): void => {
+      confirmOk.removeEventListener('click', onOk);
+      closeDialog();
+    };
+    confirmOk.addEventListener('click', onOk);
+    confirmNo.addEventListener('click', onNo, { once: true });
+  };
+
   send.addEventListener('click', () => {
     error.textContent = '';
+    if (lock.locked) {
+      // eslint-disable-next-line no-console
+      console.info('[vi] transmit blocked: order in flight');
+      return;
+    }
     const command = read();
     if (command === null) {
       // eslint-disable-next-line no-console
@@ -742,12 +924,19 @@ export function mountTicket(
       console.info(`[vi] transmit blocked by guard: ${error.textContent}`);
       return;
     }
-    rememberQty(storage, symbol(), command.quantity);
-    ownOrders.add(command.clientToken);
-    // eslint-disable-next-line no-console
-    console.info(`[vi] transmit ${command.side} ${command.quantity} ${command.symbol} ${command.type}`);
-    client.placeOrder(round.roundId, participant, command);
+    const { rules } = reviewOf(command);
+    if (rules.length > 0) {
+      askConfirm(command, rules);
+      return;
+    }
+    doTransmit(command);
   });
+  const onKey = (event: KeyboardEvent): void => {
+    if (event.key === 'Escape' && !confirmBox.hidden) {
+      closeDialog();
+    }
+  };
+  window.addEventListener('keydown', onKey);
 
   return {
     prefill(order: { side: 'BUY' | 'SELL'; type: OrderCommand['type']; price?: number; symbol?: string }): void {
@@ -794,6 +983,8 @@ export function mountTicket(
       section.scrollIntoView({ block: 'nearest' });
     },
     destroy() {
+      window.removeEventListener('keydown', onKey);
+      window.clearTimeout(lockTimer);
       unsubMarks();
       unsubFeed();
       unsubOrders();

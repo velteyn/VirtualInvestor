@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   isSeriesSymbol,
   ladderRows,
+  lockFor,
   maxAffordable,
   maxAffordableSeries,
+  needsConfirm,
   parseSeriesSymbol,
   previewQuote,
   previewSeries,
+  releaseOn,
   rememberedQty,
   rememberQty,
   touchPriceFor,
@@ -143,8 +146,7 @@ describe('sizing memory and touch pricing', () => {
   });
 });
 
-describe('ladderRows', () => {
-  const chain = [
+describe('ladderRows', () => {  const chain = [
     { ticker: 'NVDO-C620', strike: 620, referencePrice: 20 },
     { ticker: 'NVDO-C640', strike: 640, referencePrice: 5 },
     { ticker: 'NVDO-P640', strike: 640, referencePrice: 6 },
@@ -162,5 +164,46 @@ describe('ladderRows', () => {
     const rows = ladderRows(false, chain, new Map(), NaN);
     expect(rows.length).toBe(1);
     expect(rows[0].itm).toBe(false);
+  });
+});
+
+describe('needsConfirm', () => {
+  it('stays one-click below every threshold', () => {
+    expect(needsConfirm({ notional: 1000, buyingPower: 100_000, margined: false, offTouchFraction: 0 }))
+      .toEqual([]);
+  });
+
+  it('fires SIZE above 25% of buying power', () => {
+    expect(needsConfirm({ notional: 30_000, buyingPower: 100_000, margined: false, offTouchFraction: 0 }))
+      .toEqual(['SIZE']);
+  });
+
+  it('fires MARGIN for margined legs', () => {
+    expect(needsConfirm({ notional: 100, buyingPower: 100_000, margined: true, offTouchFraction: 0 }))
+      .toEqual(['MARGIN']);
+  });
+
+  it('fires OFFMARKET past 5% off touch', () => {
+    expect(needsConfirm({ notional: 100, buyingPower: 100_000, margined: false, offTouchFraction: 0.08 }))
+      .toEqual(['OFFMARKET']);
+  });
+
+  it('stacks every firing rule', () => {
+    expect(needsConfirm({ notional: 50_000, buyingPower: 100_000, margined: true, offTouchFraction: 0.2 }))
+      .toEqual(['SIZE', 'MARGIN', 'OFFMARKET']);
+  });
+});
+
+describe('transmit lock', () => {
+  it('locks on transmit and releases on its own terminal report', () => {
+    const locked = lockFor('tk-1');
+    expect(locked.locked).toBe(true);
+    expect(releaseOn(locked, 'filled', 'tk-1').locked).toBe(false);
+    expect(releaseOn(locked, 'timeout', 'tk-1').locked).toBe(false);
+  });
+
+  it('ignores foreign tokens', () => {
+    const locked = lockFor('tk-1');
+    expect(releaseOn(locked, 'filled', 'tk-2')).toBe(locked);
   });
 });

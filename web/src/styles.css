@@ -524,6 +524,68 @@ body,
   text-decoration: underline;
 }
 
+/* ── transmit confirm dialog ────────────────────────────────────────── */
+
+.vi-confirm {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 5, 8, 0.72);
+}
+
+.vi-confirm[hidden] {
+  display: none;
+}
+
+.vi-confirm-card {
+  width: min(92vw, 420px);
+  background: #14161d;
+  border: 1px solid #7aa2ff;
+  border-radius: 10px;
+  padding: 20px 22px;
+}
+
+.vi-confirm-card h3 {
+  margin: 0 0 10px;
+  font-size: 15px;
+}
+
+.vi-confirm-lines {
+  font-size: 14px;
+  margin-bottom: 10px;
+}
+
+.vi-confirm-reasons {
+  font-size: 12px;
+  color: #efb44f;
+  margin-bottom: 14px;
+}
+
+.vi-confirm-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.vi-confirm-actions button {
+  flex: 1;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #2a3046;
+  background: #1c2030;
+  color: #c7ccd8;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+#vi-tk-ok {
+  background: #26a69a;
+  border-color: #26a69a;
+  color: #08130f;
+}
+
 /* ── full-story popup ─────────────────────────────────────────────────── */
 
 .vi-story {
