@@ -30,6 +30,12 @@ Project-wide guidance for agents working in this repository.
   `-pl edge -am test`).
 - Persistence tests require the compose database: `cd infra && docker compose up -d db`.
 - Web: `cd web && npm run build`.
+- Live edge runs from Maven, not source: `mvn -pl edge spring-boot:run` resolves
+  `core`/`runtime`/`persist` from `~/.m2`, so after touching those modules run
+  `mvn -pl <modules> install -DskipTests` (tests already green) BEFORE restarting
+  edge, or the live server silently runs stale engine code. Restart edge with the
+  playtest env: `VI_ADMIN_PASSWORD=changeme VI_NARRATOR=llama` (without them the
+  admin login refuses everything and narration falls back to templates).
 
 ## Repository conventions
 

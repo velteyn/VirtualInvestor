@@ -4,7 +4,7 @@
  * Sizing memory, touch-prefill pricing, fee preview and the buying-power guard
  * arrive in 1.2-1.4; the structure already exposes the hooks they need.
  */
-import type { OrderCommand, RoundResponse, ServerClient, WirePayload } from '../adapters/serverClient';
+import type { OrderCommand, RoundResponse, ServerClient, SymbolResponse, WirePayload } from '../adapters/serverClient';
 import type { VirtualInvestorTradeFeed } from '../adapters/tradeFeed';
 import companies from '../assets/companies.json';
 
@@ -479,7 +479,7 @@ export function mountTicket(
     chainOptions = '';
     renderSeriesOptions();
     renderLadder();
-    void client.chain(ticker, round.preset).then((matches) => {
+    const applyChain = (matches: SymbolResponse[]): void => {
       if (chainUnderlying !== ticker) {
         return;
       }
@@ -510,8 +510,13 @@ export function mountTicket(
       renderLadder();
       updateFutureline();
       renderPreview();
-    }).catch(() => {
-      /* series picker stays Shares-only when the chain cannot load */
+    };
+    // Older servers predate /symbols/chain: fall back to substring search so
+    // the ladder still fills instead of stranding the ticket Shares-only.
+    void client.chain(ticker, round.preset).then(applyChain, () => {
+      void client.searchSymbols(`${ticker}-`, 30, round.preset).then(applyChain).catch(() => {
+        /* series picker stays Shares-only when the chain cannot load */
+      });
     });
   };
   const legRow = section.querySelector<HTMLDivElement>('#vi-tk-leg')!;

@@ -97,9 +97,10 @@ public final class RoundRecoveryService {
         }
         snapshots.save(new com.virtualinvestor.persist.snapshot.WorldSnapshot(tick, seq, incrementalState));
         snapshots.deleteBefore(tick);
-        // Compact the consumed prefix so checkpoints stay O(tail) as the round grows.
+        // Compact only the consumed clock scaffolding: fills, reports and prints
+        // stay for the fill-history query, which folds the same stream.
         if (log instanceof JdbcEventLog jdbc) {
-            jdbc.pruneBelow(seq);
+            jdbc.pruneTicksBelow(seq);
         }
     }
 

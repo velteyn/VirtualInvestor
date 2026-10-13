@@ -16,13 +16,15 @@ const BANK = {
   custodyRate: 0, seriesRate: 0.001, seriesMinimum: 1.0,
 };
 
-function mount() {
+function mount(options: { chainFails?: boolean } = {}) {
   const column = document.createElement('div');
   document.body.appendChild(column);
   const placed: Array<{ roundId: string; participant: string; command: unknown }> = [];
   const client = {
     searchSymbols: vi.fn(async () => CHAIN),
-    chain: vi.fn(async () => CHAIN),
+    chain: options.chainFails
+      ? vi.fn(async () => { throw new Error('404'); })
+      : vi.fn(async () => CHAIN),
     banks: vi.fn(async () => [BANK]),
     bankOfPlayer: () => 'b1',
     onPayload: () => () => undefined,
@@ -97,6 +99,70 @@ describe('ticket mount', () => {
     column.querySelector<HTMLButtonElement>('#vi-tk-send')?.click();
     expect(placed.length).toBe(1);
     expect((placed[0].command as { symbol: string }).symbol).toMatch(/NVDO-[CP]/);
+    ticket.destroy();
+  });
+
+  it('mode switching hides unrelated rows', async () => {
+    const { column, ticket } = mount();
+    await flush();
+    const hidden = (sel: string): boolean =>
+      (column.querySelector(sel) as HTMLElement)?.hidden ?? false;
+    column.querySelector<HTMLButtonElement>('[data-mode="FUTURES"]')?.click();
+    expect(hidden('[data-series-row]')).toBe(true);
+    expect(hidden('#vi-tk-futureline')).toBe(false);
+    expect(hidden('#vi-tk-leg')).toBe(true);
+    expect(hidden('#vi-tk-ladder')).toBe(true);
+    column.querySelector<HTMLButtonElement>('[data-mode="OPTIONS"]')?.click();
+    expect(hidden('[data-series-row]')).toBe(true);
+    expect(hidden('#vi-tk-futureline')).toBe(true);
+    expect(hidden('#vi-tk-leg')).toBe(false);
+    expect(hidden('#vi-tk-ladder')).toBe(false);
+    column.querySelector<HTMLButtonElement>('[data-mode="SHARES"]')?.click();
+    expect(hidden('[data-series-row]')).toBe(false);
+    expect(hidden('#vi-tk-futureline')).toBe(true);
+    expect(hidden('#vi-tk-leg')).toBe(true);
+    expect(hidden('#vi-tk-ladder')).toBe(true);
+    ticket.destroy();
+  });
+
+  it('Put leg switches the ladder to puts and transmits a put', async () => {    const { column, ticket, placed } = mount();
+    await flush();
+    const symbolSelect = column.querySelector<HTMLSelectElement>('#vi-tk-symbol');
+    if (symbolSelect !== null) {
+      symbolSelect.value = 'NVDO';
+      symbolSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    await flush();
+    column.querySelector<HTMLButtonElement>('[data-mode="OPTIONS"]')?.click();
+    await flush();
+    column.querySelector<HTMLButtonElement>('[data-leg="PUT"]')?.click();
+    const strikes = [...column.querySelectorAll<HTMLButtonElement>('[data-strike]')];
+    expect(strikes.length).toBeGreaterThan(0);
+    expect(strikes.every((b) => (b.getAttribute('data-strike') ?? '').includes('-P'))).toBe(true);
+    strikes[0].click();
+    const qty = column.querySelector<HTMLInputElement>('#vi-tk-qty');
+    if (qty !== null) {
+      qty.value = '1';
+    }
+    column.querySelector<HTMLButtonElement>('#vi-tk-send')?.click();
+    expect(placed.length).toBe(1);
+    expect((placed[0].command as { symbol: string }).symbol).toContain('-P');
+    ticket.destroy();
+  });
+
+  it('falls back to search when the chain endpoint is missing', async () => {
+    const { column, ticket } = mount({ chainFails: true });
+    await flush();
+    const symbolSelect = column.querySelector<HTMLSelectElement>('#vi-tk-symbol');
+    if (symbolSelect !== null) {
+      symbolSelect.value = 'NVDO';
+      symbolSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    await flush();
+    await flush();
+    column.querySelector<HTMLButtonElement>('[data-mode="OPTIONS"]')?.click();
+    await flush();
+    expect(column.querySelectorAll('[data-strike]').length).toBeGreaterThan(0);
     ticket.destroy();
   });
 });

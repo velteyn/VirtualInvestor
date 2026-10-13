@@ -86,8 +86,8 @@ public final class LlamaCppNarrator implements Narrator {
 
     /** Simulation facts plus the fictional-universe rules; no player input. */
     static String promptFor(Request request) {
-        String subjects = request.subjectNames().isEmpty() ? "the broad market"
-                : String.join(", ", request.subjectNames());
+        boolean named = !request.subjectNames().isEmpty();
+        String subjects = named ? String.join(", ", request.subjectNames()) : "the broad market";
         return "You are an economic journalist covering a fictional stock market. "
                 + "Describe the financial situation in these facts in 3 to 5 vivid sentences, "
                 + "at most 120 words, using ONLY what is given. "
@@ -97,7 +97,10 @@ public final class LlamaCppNarrator implements Narrator {
                 + "Facts. Headline: " + request.headline() + ". Subjects: " + subjects + ". "
                 + (request.sector() == null || request.sector().isBlank() ? ""
                         : "Sector: " + request.sector() + ". ")
-                + "Rules. Use ONLY these fictional company names. Never mention real companies, "
+                + (named
+                        ? "Rules. Use ONLY these fictional company names. "
+                        : "Rules. Name no companies at all; speak only of the broad market. ")
+                + "Never mention real companies, "
                 + "products, or news outlets. Never advise buying or selling. Plain prose, no headline. Story:";
     }
 

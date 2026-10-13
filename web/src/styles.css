@@ -705,6 +705,14 @@ body,
   font-size: 13px;
 }
 
+/* Mode and type gating toggles `hidden`, but the display rules above beat the
+   UA [hidden] rule — restore it, or every mode shows every other mode's rows. */
+.vi-ticket label[hidden],
+.vi-ticket-side[hidden],
+.vi-tk-ladder[hidden] {
+  display: none;
+}
+
 .vi-tk-ladder {
   display: flex;
   flex-wrap: wrap;

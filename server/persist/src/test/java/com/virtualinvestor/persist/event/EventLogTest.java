@@ -80,4 +80,23 @@ class EventLogTest {
                 () -> log.appendBatch(List.of(new SequencedEvent(1L, new GameEvent.Tick(1L, 100L)))));
         assertEquals(1L, log.latestSeq());
     }
+
+    @Test
+    void pruneTicksBelowKeepsFills() {
+        JdbcEventLog log = new JdbcEventLog(dataSource, ROUND);
+        BatchedEventLogWriter writer = new BatchedEventLogWriter(log, 10);
+        writer.appendAll(List.of(
+                new GameEvent.Tick(1L, 100L),
+                new GameEvent.TradePrinted("ACME", 100.0, 10L, com.virtualinvestor.core.domain.OrderSide.BUY, 2L),
+                new GameEvent.Tick(3L, 300L),
+                new GameEvent.Tick(4L, 400L)));
+        writer.flush();
+
+        log.pruneTicksBelow(4L);
+
+        List<SequencedEvent> read = log.readFrom(1L);
+        assertEquals(2, read.size(), "consumed Ticks go, fills stay");
+        assertEquals(2L, read.get(0).seq());
+        assertEquals(4L, read.get(1).seq());
+    }
 }

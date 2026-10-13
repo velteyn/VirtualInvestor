@@ -119,3 +119,15 @@ reconnect, replacing the mirror rather than merging into it.
 
 - **WHEN** a player returns after an absence with fills and closes behind them
 - **THEN** positions, account, working orders and history all reflect the server state
+
+### Requirement: History spans checkpoints
+
+Fill history SHALL cover the whole round, not just the tail since the last
+checkpoint: checkpoint compaction SHALL delete only clock-scaffolding Tick
+rows and keep fills, reports and prints for the history query and post-game
+review.
+
+#### Scenario: Early fills survive
+
+- **WHEN** a fill completes and several checkpoints pass
+- **THEN** the History section still lists it with price, quantity and fee

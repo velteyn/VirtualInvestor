@@ -170,6 +170,9 @@ export function mountPanels(
     if (payload.type === 'trade') {
       prices.set(String(payload.symbol), Number(payload.price));
       renderWatchlist();
+      // Marks move every print: position P&L must tick with the market, not
+      // just on fills (terminal-trading-ui: P&L updates on a tick).
+      renderPositions();
     }
   }));
 

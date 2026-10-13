@@ -7,8 +7,12 @@ import type { VirtualInvestorTradeFeed } from '../adapters/tradeFeed';
 function mount() {
   const layout = document.createElement('div');
   document.body.appendChild(layout);
+  const payloadListeners: Array<(payload: never) => void> = [];
   const client = {
-    onPayload: () => () => undefined,
+    onPayload: (listener: (payload: never) => void) => {
+      payloadListeners.push(listener);
+      return () => undefined;
+    },
     searchSymbols: vi.fn(async () => [{ ticker: 'NVDO-C640', name: 'Nvido 640 Call' }]),
     getLeaderboard: vi.fn(async () => [
       { rank: 1, participantId: 'r1', displayName: 'MARK', equity: 110_000, startingCapital: 100_000, returnFraction: 0.1 },
@@ -28,7 +32,7 @@ function mount() {
   } as unknown as VirtualInvestorTradeFeed;
   const round = { roundId: 'r1', startingCapital: 100_000, preset: 'REALISTIC' } as never;
   const panels = mountPanels(layout, client, round, tradeFeed, {});
-  return { layout, panels };
+  return { layout, panels, payloadListeners };
 }
 
 const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
@@ -79,6 +83,21 @@ describe('panels mount', () => {
     const rows = [...layout.querySelectorAll('.vi-watchlist [data-symbol]')]
       .map((b) => b.getAttribute('data-symbol'));
     expect(rows).not.toContain('PEAR');
+    panels.destroy();
+  });
+
+  it('ticks position P&L on trade prints', async () => {
+    const { layout, panels, payloadListeners } = mount();
+    await flush();
+    const before = layout.querySelector('.vi-positions')?.textContent ?? '';
+    expect(before).toContain('P&L');
+    for (const listener of payloadListeners) {
+      listener({ type: 'trade', symbol: 'NVDO', price: 700 } as never);
+    }
+    await flush();
+    const after = layout.querySelector('.vi-positions')?.textContent ?? '';
+    // 10 NVDO @ 640 marked at 700 → +600 unrealized.
+    expect(after).toContain('P&L +600.00');
     panels.destroy();
   });
 });

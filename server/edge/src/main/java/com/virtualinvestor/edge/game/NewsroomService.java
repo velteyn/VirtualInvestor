@@ -73,26 +73,36 @@ public class NewsroomService {
     /** Round preview at start (newsroom-narrator spec: preview kind). */
     public void preview(String roundId, String preset, double startingCapital) {
         desk.submit(() -> {
-            String headline = "Round " + roundId + " opens: " + preset + " session";
-            Narrator.Request request = new Narrator.Request("preview-" + roundId, "PREVIEW", headline,
-                    "MACRO", List.of(), null, List.of(), 0.0, 0L);
-            narrator.narrate(request).ifPresent(
-                    draft -> publish(roundId, request, ArticleStore.Kind.PREVIEW, headline,
-                            "A " + preset + " session with $" + (long) startingCapital + " starting capital. "
-                                    + draft.body(),
-                            draft.model()));
+            try {
+                String headline = "Round " + roundId + " opens: " + preset + " session";
+                Narrator.Request request = new Narrator.Request("preview-" + roundId, "PREVIEW", headline,
+                        "MACRO", List.of(), null, List.of(), 0.0, 0L);
+                narrator.narrate(request).ifPresent(
+                        draft -> publish(roundId, request, ArticleStore.Kind.PREVIEW, headline,
+                                "A " + preset + " session with $" + (long) startingCapital + " starting capital. "
+                                        + draft.body(),
+                                draft.model()));
+            } catch (Exception e) {
+                // The desk must never die silently: a failed preview is a bare
+                // headline, not a wedged newsroom (playtest: zero articles, no log).
+                log.warn("newsroom preview failed for {}: {}", roundId, e.toString());
+            }
         });
     }
 
     /** Round recap at settle (newsroom-narrator spec: recap kind). */
     public void recap(String roundId, long tick) {
         desk.submit(() -> {
-            String headline = "Round " + roundId + " settles";
-            Narrator.Request request = new Narrator.Request("recap-" + roundId, "RECAP", headline,
-                    "MACRO", List.of(), null, List.of(), 0.0, tick);
-            narrator.narrate(request).ifPresent(
-                    draft -> publish(roundId, request, ArticleStore.Kind.RECAP, headline, draft.body(),
-                            draft.model()));
+            try {
+                String headline = "Round " + roundId + " settles";
+                Narrator.Request request = new Narrator.Request("recap-" + roundId, "RECAP", headline,
+                        "MACRO", List.of(), null, List.of(), 0.0, tick);
+                narrator.narrate(request).ifPresent(
+                        draft -> publish(roundId, request, ArticleStore.Kind.RECAP, headline, draft.body(),
+                                draft.model()));
+            } catch (Exception e) {
+                log.warn("newsroom recap failed for {}: {}", roundId, e.toString());
+            }
         });
     }
 

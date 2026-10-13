@@ -83,6 +83,15 @@ class LlamaCppNarratorTest {
     }
 
     @Test
+    void subjectlessPromptNamesNoCompanies() {
+        Narrator.Request preview = new Narrator.Request("preview-r1", "PREVIEW",
+                "Round round-1 opens: REALISTIC session", "MACRO", List.of(), null, List.of(), 0.0, 0L);
+        String prompt = LlamaCppNarrator.promptFor(preview);
+
+        assertTrue(prompt.contains("Name no companies at all"));
+    }
+
+    @Test
     void dedupeSentencesKeepsFirstOccurrence() {
         String looped = "The gaming industry is fast-growing. The gaming industry is fast-growing. "
                 + "New customers arrive daily.";

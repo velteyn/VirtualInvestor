@@ -86,6 +86,25 @@ public final class JdbcEventLog implements EventLog {
         }
     }
 
+    /**
+     * Delete only clock-scaffolding Tick rows below a snapshotted sequence.
+     * Recovery replays the tail onto the snapshot, so consumed Ticks can go —
+     * but fills, reports and prints must stay: the fill-history query folds the
+     * same stream the world produced, and pruning them evaporates history
+     * (playtest: fills read back empty after every checkpoint).
+     */
+    public void pruneTicksBelow(long seq) {
+        try (Connection connection = dataSource.getConnection();
+                PreparedStatement statement = connection.prepareStatement(
+                        "DELETE FROM events WHERE round_id = ? AND seq < ? AND type = 'Tick'")) {
+            statement.setString(1, roundId);
+            statement.setLong(2, seq);
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            throw new IllegalStateException("failed pruning ticks for round " + roundId, e);
+        }
+    }
+
     @Override
     public List<SequencedEvent> readFrom(long fromSeq) {
         List<SequencedEvent> events = new ArrayList<>();
