@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   isSeriesSymbol,
+  ladderRows,
   maxAffordable,
   maxAffordableSeries,
   parseSeriesSymbol,
@@ -139,5 +140,27 @@ describe('sizing memory and touch pricing', () => {
 
   it('floors whole lots', () => {
     expect(maxAffordable(10_000, 640)).toBe(15);
+  });
+});
+
+describe('ladderRows', () => {
+  const chain = [
+    { ticker: 'NVDO-C620', strike: 620, referencePrice: 20 },
+    { ticker: 'NVDO-C640', strike: 640, referencePrice: 5 },
+    { ticker: 'NVDO-P640', strike: 640, referencePrice: 6 },
+  ];
+
+  it('prefers live marks over references and sorts by strike', () => {
+    const rows = ladderRows(true, chain, new Map([['NVDO-C640', 8]]), 665);
+    expect(rows.map((r) => r.ticker)).toEqual(['NVDO-C620', 'NVDO-C640']);
+    expect(rows[1].premium).toBe(8);
+    expect(rows[0].premium).toBe(20);
+    expect(rows[1].itm).toBe(true);
+  });
+
+  it('marks OTM rows and handles missing underlying marks', () => {
+    const rows = ladderRows(false, chain, new Map(), NaN);
+    expect(rows.length).toBe(1);
+    expect(rows[0].itm).toBe(false);
   });
 });

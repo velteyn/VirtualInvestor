@@ -179,8 +179,33 @@ export function previewSeries(
   return { notional: premium, fee, lock, need: lock + fee, affordable: true, reason: '' };
 }
 
-/** Largest whole contracts affordable, ignoring fee dust the server still checks. */
-export function maxAffordableSeries(
+/** One strike-ladder row: live mark premium when printed, else the listed reference. */
+export interface LadderRow {
+  ticker: string;
+  strike: number;
+  premium: number;
+  itm: boolean;
+}
+
+export function ladderRows(
+  calls: boolean,
+  chain: Array<{ ticker: string; strike: number; referencePrice: number }>,
+  marks: Map<string, number>,
+  underlyingMark: number,
+): LadderRow[] {
+  return chain
+    .filter((entry) => (calls ? entry.ticker.includes('-C') : entry.ticker.includes('-P')))
+    .map((entry) => {
+      const premium = marks.get(entry.ticker) ?? entry.referencePrice;
+      const intrinsic = calls
+        ? Math.max(underlyingMark - entry.strike, 0)
+        : Math.max(entry.strike - underlyingMark, 0);
+      return { ticker: entry.ticker, strike: entry.strike, premium, itm: intrinsic > 0 };
+    })
+    .sort((a, b) => a.strike - b.strike);
+}
+
+export type TicketMode = 'SHARES' | 'FUTURES' | 'OPTIONS';export function maxAffordableSeries(
   side: 'BUY' | 'SELL',
   price: number,
   meta: SeriesMeta,
@@ -227,6 +252,7 @@ export function mountTicket(
     if (payload.type === 'trade') {
       marks.set(String(payload.symbol), Number(payload.price));
       renderPreview();
+      renderLadder();
     } else if (payload.type === 'depth' && payload.symbol === symbol()) {
       const bids = payload.bids as Array<{ price: number }> | undefined;
       const asks = payload.asks as Array<{ price: number }> | undefined;
@@ -257,16 +283,27 @@ export function mountTicket(
   section.className = 'vi-panel vi-ticket';
   section.innerHTML = `
     <h2>Ticket</h2>
+    <div class="vi-ticket-modes">
+      <button data-mode="SHARES" class="vi-active">Shares</button>
+      <button data-mode="FUTURES">Futures</button>
+      <button data-mode="OPTIONS">Options</button>
+    </div>
     <label>Symbol
       <select id="vi-tk-symbol">
         ${ORDER_SYMBOLS.map((ticker) => `<option value="${ticker}">${ticker}</option>`).join('')}
       </select>
     </label>
-    <label>Series
+    <label data-series-row>Series
       <select id="vi-tk-series">
         <option value="">Shares</option>
       </select>
     </label>
+    <div id="vi-tk-futureline" class="vi-tk-future" hidden></div>
+    <div id="vi-tk-leg" class="vi-ticket-side" hidden>
+      <button data-leg="CALL" class="vi-active">Call</button>
+      <button data-leg="PUT">Put</button>
+    </div>
+    <div id="vi-tk-ladder" class="vi-tk-ladder" hidden></div>
     <div class="vi-ticket-side">
       <button data-side="BUY" class="vi-active vi-buy">Buy</button>
       <button data-side="SELL" class="vi-sell">Sell</button>
@@ -319,10 +356,27 @@ export function mountTicket(
   const symbolSelect = section.querySelector<HTMLSelectElement>('#vi-tk-symbol')!;
   const seriesSelect = section.querySelector<HTMLSelectElement>('#vi-tk-series')!;
   const underlying = (): string => symbolSelect.value;
-  const symbol = (): string => seriesSelect.value === '' ? symbolSelect.value : seriesSelect.value;
   /** Margin fraction for the selected series (chain metadata, 20% fallback). */
+  const modeButtons = [...section.querySelectorAll<HTMLButtonElement>('[data-mode]')];
+  const legButtons = [...section.querySelectorAll<HTMLButtonElement>('[data-leg]')];
+  const seriesRow = section.querySelector<HTMLElement>('[data-series-row]')!;
+  const futureLine = section.querySelector<HTMLDivElement>('#vi-tk-futureline')!;
+  const ladder = section.querySelector<HTMLDivElement>('#vi-tk-ladder')!;
+  let mode: TicketMode = 'SHARES';
+  let leg: 'CALL' | 'PUT' = 'CALL';
+  let ladderPick = '';
+  let chainList: Array<{ ticker: string; strike: number; referencePrice: number }> = [];
+  const symbol = (): string => {
+    if (mode === 'FUTURES') {
+      return `${underlying()}-F`;
+    }
+    if (mode === 'OPTIONS') {
+      return ladderPick;
+    }
+    return seriesSelect.value === '' ? symbolSelect.value : seriesSelect.value;
+  };
   const seriesMeta = (): SeriesMeta | null => {
-    const picked = seriesSelect.value;
+    const picked = symbol();
     if (picked === '') {
       return null;
     }
@@ -356,8 +410,11 @@ export function mountTicket(
     chainUnderlying = ticker;
     chainMargins = new Map();
     chainRefs = new Map();
+    chainList = [];
+    ladderPick = '';
     chainOptions = '';
     renderSeriesOptions();
+    renderLadder();
     void client.searchSymbols(`${ticker}-`, 30, round.preset).then((matches) => {
       if (chainUnderlying !== ticker) {
         return;
@@ -368,6 +425,14 @@ export function mountTicket(
       const puts = matches.filter((m) => kindOf(m.ticker) === 'PUT');
       chainMargins = new Map(matches.map((m) => [m.ticker, m.initialMarginFraction]));
       chainRefs = new Map(matches.map((m) => [m.ticker, m.referencePrice]));
+      chainList = matches
+        .map((m) => {
+          const meta = parseSeriesSymbol(m.ticker);
+          return meta === null || (meta.kind !== 'CALL' && meta.kind !== 'PUT')
+            ? null
+            : { ticker: m.ticker, strike: meta.strike, referencePrice: m.referencePrice };
+        })
+        .filter((entry): entry is { ticker: string; strike: number; referencePrice: number } => entry !== null);
       const opt = (m: { ticker: string }): string => {
         const ref = chainRefs.get(m.ticker);
         const hint = ref !== undefined && kindOf(m.ticker) !== 'FUTURE' ? ` (~$${ref.toFixed(2)})` : '';
@@ -378,11 +443,94 @@ export function mountTicket(
         + (calls.length > 0 ? `<optgroup label="Calls">${calls.map(opt).join('')}</optgroup>` : '')
         + (puts.length > 0 ? `<optgroup label="Puts">${puts.map(opt).join('')}</optgroup>` : '');
       renderSeriesOptions();
+      renderLadder();
+      updateFutureline();
       renderPreview();
     }).catch(() => {
       /* series picker stays Shares-only when the chain cannot load */
     });
   };
+  const legRow = section.querySelector<HTMLDivElement>('#vi-tk-leg')!;
+  /** Strike ladder for Options mode: live mark premium else reference, ITM badged. */
+  const renderLadder = (): void => {
+    if (mode !== 'OPTIONS') {
+      return;
+    }
+    const umark = marks.get(underlying()) ?? NaN;
+    const rows = ladderRows(leg === 'CALL', chainList, marks, umark);
+    if (pendingSeries !== '' && rows.some((row) => row.ticker === pendingSeries)) {
+      ladderPick = pendingSeries;
+      pendingSeries = '';
+    }
+    if (rows.length > 0 && !rows.some((row) => row.ticker === ladderPick)) {
+      ladderPick = rows[0].ticker;
+      const ref = chainRefs.get(ladderPick);
+      if (ref !== undefined && Number.isFinite(ref) && ref > 0) {
+        limit.value = String(ref);
+        limitDirty = true;
+      }
+    }
+    ladder.innerHTML = rows.map((row) => {
+      const active = row.ticker === ladderPick ? 'vi-active' : '';
+      return `<button data-strike="${row.ticker}" class="${active}">${row.strike}`
+        + ` @ ${row.premium.toFixed(2)}${row.itm ? ' ITM' : ''}</button>`;
+    }).join('') || '<span class="vi-empty">No strikes listed</span>';
+  };
+  ladder.addEventListener('click', (event: Event) => {
+    const target = event.target as HTMLElement;
+    const ticker = target.getAttribute('data-strike');
+    if (ticker === null) {
+      return;
+    }
+    ladderPick = ticker;
+    refreshQty();
+    const ref = chainRefs.get(ticker);
+    if (ref !== undefined && Number.isFinite(ref) && ref > 0) {
+      limit.value = String(ref);
+      limitDirty = true;
+    }
+    renderLadder();
+    renderPreview();
+  });
+  const updateFutureline = (): void => {
+    if (mode !== 'FUTURES') {
+      return;
+    }
+    const fraction = chainMargins.get(symbol()) ?? 0.2;
+    const leverage = fraction > 0 ? (1 / fraction).toFixed(1) : '?';
+    futureLine.textContent = `${symbol()} · ${(fraction * 100).toFixed(0)}% margin (${leverage}x) · exp bell`;
+  };
+  const setMode = (next: TicketMode): void => {
+    mode = next;
+    modeButtons.forEach((b) => b.classList.toggle('vi-active', b.getAttribute('data-mode') === next));
+    seriesRow.hidden = next !== 'SHARES';
+    futureLine.hidden = next !== 'FUTURES';
+    legRow.hidden = next !== 'OPTIONS';
+    ladder.hidden = next !== 'OPTIONS';
+    limitDirty = false;
+    stopDirty = false;
+    if (next === 'FUTURES') {
+      updateFutureline();
+    }
+    if (next === 'OPTIONS') {
+      renderLadder();
+    }
+    followTouch();
+    renderPreview();
+  };
+  modeButtons.forEach((button) => button.addEventListener('click', () => {
+    const next = button.getAttribute('data-mode') as TicketMode | null;
+    if (next !== null) {
+      setMode(next);
+    }
+  }));
+  legButtons.forEach((button) => button.addEventListener('click', () => {
+    leg = (button.getAttribute('data-leg') ?? 'CALL') as 'CALL' | 'PUT';
+    legButtons.forEach((b) => b.classList.toggle('vi-active', b === button));
+    ladderPick = '';
+    renderLadder();
+    renderPreview();
+  }));
   const refreshQty = (): void => {
     qty.value = String(rememberedQty(storage, symbol(), 100));
   };
@@ -462,6 +610,10 @@ export function mountTicket(
     const quantity = Math.floor(Number(qty.value));
     if (!Number.isFinite(quantity) || quantity <= 0) {
       error.textContent = 'quantity must be a positive whole number';
+      return null;
+    }
+    if (mode === 'OPTIONS' && ladderPick === '') {
+      error.textContent = 'pick a strike from the ladder';
       return null;
     }
     const type = typeSelect.value as TicketType;
@@ -602,12 +754,22 @@ export function mountTicket(
       if (order.symbol !== undefined) {
         if (ORDER_SYMBOLS.includes(order.symbol)) {
           symbolSelect.value = order.symbol;
+          setMode('SHARES');
           refreshQty();
         } else {
           const meta = parseSeriesSymbol(order.symbol);
           if (meta !== null && ORDER_SYMBOLS.includes(meta.underlying)) {
             symbolSelect.value = meta.underlying;
             pendingSeries = order.symbol;
+            if (meta.kind === 'FUTURE') {
+              setMode('FUTURES');
+            } else {
+              leg = meta.kind === 'PUT' ? 'PUT' : 'CALL';
+              legButtons.forEach((b) => b.classList.toggle('vi-active',
+                b.getAttribute('data-leg') === leg));
+              ladderPick = order.symbol;
+              setMode('OPTIONS');
+            }
             loadChain(meta.underlying);
             refreshQty();
           }

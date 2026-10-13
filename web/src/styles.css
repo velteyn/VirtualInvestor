@@ -610,6 +610,63 @@ body,
   margin-bottom: 12px;
 }
 
+.vi-ticket-modes {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.vi-ticket-modes button {
+  flex: 1;
+  width: auto;
+  padding: 6px;
+  background: #14161d;
+  color: #c7ccd8;
+  border: 1px solid #2a3046;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.vi-ticket-modes button.vi-active {
+  background: #2a3a5f;
+  border-color: #7aa2ff;
+  color: #ffffff;
+}
+
+.vi-tk-future {
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  background: #101218;
+  border: 1px solid #232838;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.vi-tk-ladder {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.vi-tk-ladder button {
+  padding: 5px 9px;
+  background: #1c2030;
+  color: #c7ccd8;
+  border: 1px solid #2a3046;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  width: auto;
+}
+
+.vi-tk-ladder button.vi-active {
+  background: #2a3a5f;
+  border-color: #7aa2ff;
+  color: #ffffff;
+}
+
 .vi-ticket-side button {
   flex: 1;
   width: auto;
