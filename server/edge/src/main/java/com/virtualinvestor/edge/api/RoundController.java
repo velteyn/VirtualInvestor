@@ -78,26 +78,39 @@ public class RoundController {
                 ? RealismPreset.REALISTIC
                 : parsePreset(request.preset());
         return game.search(request.query(), limit).stream()
-                .map(instrument -> {
-                    String assetClass = switch (instrument.type()) {
-                        case INDEX -> "Index";
-                        case EQUITY -> "Equity";
-                        case FUTURE -> "Future";
-                        case OPTION -> "Option";
-                    };
-                    double initialMargin = 0.0;
-                    double maintenanceMargin = 0.0;
-                    if (instrument.isSeries()) {
-                        MarketRules rules = MarketRules.forSeries(instrument, preset);
-                        initialMargin = rules.initialMarginFraction();
-                        maintenanceMargin = rules.maintenanceMarginFraction();
-                    }
-                    return new SymbolResponse(
-                            instrument.ticker(), instrument.name(), instrument.sector(), assetClass,
-                            instrument.tickSize(), instrument.quantityGrid(), instrument.referencePrice(),
-                            initialMargin, maintenanceMargin);
-                })
+                .map(instrument -> toSymbol(instrument, preset))
                 .toList();
+    }
+
+    @PostMapping(path = "/symbols/chain", version = "1")
+    public List<SymbolResponse> chain(@RequestBody ChainRequest request) {
+        RealismPreset preset = request.preset() == null || request.preset().isBlank()
+                ? RealismPreset.REALISTIC
+                : parsePreset(request.preset());
+        return game.chain(request.underlying()).stream()
+                .map(instrument -> toSymbol(instrument, preset))
+                .toList();
+    }
+
+    private static SymbolResponse toSymbol(com.virtualinvestor.core.instrument.Instrument instrument,
+            RealismPreset preset) {
+        String assetClass = switch (instrument.type()) {
+            case INDEX -> "Index";
+            case EQUITY -> "Equity";
+            case FUTURE -> "Future";
+            case OPTION -> "Option";
+        };
+        double initialMargin = 0.0;
+        double maintenanceMargin = 0.0;
+        if (instrument.isSeries()) {
+            MarketRules rules = MarketRules.forSeries(instrument, preset);
+            initialMargin = rules.initialMarginFraction();
+            maintenanceMargin = rules.maintenanceMarginFraction();
+        }
+        return new SymbolResponse(
+                instrument.ticker(), instrument.name(), instrument.sector(), assetClass,
+                instrument.tickSize(), instrument.quantityGrid(), instrument.referencePrice(),
+                initialMargin, maintenanceMargin);
     }
 
     @PostMapping(path = "/rounds/leaderboard", version = "1")
@@ -212,6 +225,9 @@ public class RoundController {
     }
 
     public record SymbolSearchRequest(String query, int limit, String preset) {
+    }
+
+    public record ChainRequest(String underlying, String preset) {
     }
 
     public record SymbolResponse(String ticker, String name, String sector, String assetClass,

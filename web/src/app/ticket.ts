@@ -479,7 +479,7 @@ export function mountTicket(
     chainOptions = '';
     renderSeriesOptions();
     renderLadder();
-    void client.searchSymbols(`${ticker}-`, 30, round.preset).then((matches) => {
+    void client.chain(ticker, round.preset).then((matches) => {
       if (chainUnderlying !== ticker) {
         return;
       }

@@ -22,6 +22,7 @@ function mount() {
   const placed: Array<{ roundId: string; participant: string; command: unknown }> = [];
   const client = {
     searchSymbols: vi.fn(async () => CHAIN),
+    chain: vi.fn(async () => CHAIN),
     banks: vi.fn(async () => [BANK]),
     bankOfPlayer: () => 'b1',
     onPayload: () => () => undefined,

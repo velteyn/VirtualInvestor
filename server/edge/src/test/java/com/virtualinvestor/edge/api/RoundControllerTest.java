@@ -84,6 +84,17 @@ class RoundControllerTest {
     }
 
     @Test
+    void symbolChainReturnsFutureFirst() throws Exception {
+        mockMvc.perform(post("/api/symbols/chain")
+                        .header("X-API-Version", "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"underlying\":\"NVDO\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].ticker").value("NVDO-F"))
+                .andExpect(jsonPath("$[0].assetClass").value("Future"));
+    }
+
+    @Test
     void unsupportedVersionIsRejected() throws Exception {
         mockMvc.perform(post("/api/rounds")
                         .header("X-API-Version", "99")

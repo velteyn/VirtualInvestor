@@ -196,6 +196,10 @@ export class ServerClient {
     return this.post<SymbolResponse[]>('/api/symbols/search', { query, limit, preset });
   }
 
+  chain(underlying: string, preset?: string): Promise<SymbolResponse[]> {
+    return this.post<SymbolResponse[]>('/api/symbols/chain', { underlying, preset });
+  }
+
   /** Warm-up history for a symbol in a running round, as OHLCV bars. */
   getHistory(roundId: string, symbol: string): Promise<HistoryBar[]> {
     return this.post<HistoryBar[]>('/api/rounds/history', { roundId, symbol });

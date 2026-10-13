@@ -13,7 +13,8 @@ export interface Panels {
   destroy(): void;
 }
 
-const WATCH_SYMBOLS = ['NVDO', 'PEAR', 'VOLT', 'TRLL', 'SOCL'];
+const WATCH_DEFAULTS = ['NVDO', 'PEAR', 'VOLT', 'TRLL', 'SOCL'];
+const WATCH_KEY = 'vi.watchlist.v1';
 
 export interface PanelsOptions {
   /** Switch the chart to a watchlist symbol (always a valid name). */
@@ -31,7 +32,10 @@ export function mountPanels(
   column.className = 'vi-column';
   column.innerHTML = `
     <section class="vi-panel vi-rivals"><h2>Rivals</h2><ol class="vi-rows"></ol></section>
-    <section class="vi-panel vi-watchlist"><h2>Watchlist</h2><ul class="vi-rows"></ul></section>`;
+    <section class="vi-panel vi-watchlist"><h2>Watchlist</h2>
+      <div class="vi-watch-add"><input type="search" class="vi-watch-q" placeholder="Add symbol…" aria-label="Add watchlist symbol" list="vi-watch-hits" />
+      <datalist id="vi-watch-hits"></datalist></div>
+      <ul class="vi-rows"></ul></section>`;
   root.appendChild(column);
 
   const strip = document.createElement('section');
@@ -64,18 +68,95 @@ export function mountPanels(
 
   // ── watchlist ──────────────────────────────────────────────────────────
   // Rows are buttons: clicking one switches the chart to that symbol.
-  let selected = 'NVDO';
+  // Searchable: a query box adds any searched symbol (equity or series);
+  // the list persists per browser, defaulting to the five majors.
+  const loadWatch = (): string[] => {
+    try {
+      const raw = window.localStorage.getItem(WATCH_KEY);
+      if (raw === null) {
+        return [...WATCH_DEFAULTS];
+      }
+      const parsed: unknown = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        return [...WATCH_DEFAULTS];
+      }
+      const symbols = parsed.filter((s): s is string => typeof s === 'string' && s.length > 0);
+      return symbols.length > 0 ? [...new Set(symbols)] : [...WATCH_DEFAULTS];
+    } catch {
+      return [...WATCH_DEFAULTS];
+    }
+  };
+  let watchSymbols = loadWatch();
+  const saveWatch = (): void => {
+    try {
+      window.localStorage.setItem(WATCH_KEY, JSON.stringify(watchSymbols));
+    } catch {
+      /* private mode: list still works for the session */
+    }
+  };
+  let selected = watchSymbols[0] ?? 'NVDO';
+  const watchQuery = column.querySelector('.vi-watch-q') as HTMLInputElement;
+  const watchHits = column.querySelector('#vi-watch-hits') as HTMLElement;
   const renderWatchlist = (): void => {
-    watchRows.innerHTML = WATCH_SYMBOLS.map((symbol) => {
+    watchRows.innerHTML = watchSymbols.map((symbol) => {
       const price = prices.get(symbol);
       const shown = price === undefined ? '—' : price.toFixed(2);
       const cls = symbol === selected ? 'vi-active' : '';
-      return `<li class="${cls}"><button data-symbol="${symbol}"><span>${symbol}</span><span>${shown}</span></button></li>`;
+      return `<li class="${cls}"><button data-symbol="${symbol}"><span>${symbol}</span><span>${shown}</span></button><button data-remove="${symbol}" aria-label="Remove ${symbol}">×</button></li>`;
     }).join('');
   };
   renderWatchlist();
+  const addSymbol = (symbol: string): void => {
+    const clean = symbol.trim().toUpperCase();
+    if (clean === '') {
+      return;
+    }
+    if (!watchSymbols.includes(clean)) {
+      watchSymbols = [...watchSymbols, clean];
+      saveWatch();
+    }
+    selected = clean;
+    renderWatchlist();
+    options.onSelectSymbol?.(clean);
+  };
+  let queryTimer = 0;
+  watchQuery.addEventListener('input', () => {
+    window.clearTimeout(queryTimer);
+    queryTimer = window.setTimeout(() => {
+      const q = watchQuery.value.trim();
+      if (q === '') {
+        watchHits.innerHTML = '';
+        return;
+      }
+      void client.searchSymbols(q, 8, round.preset).then((matches) => {
+        watchHits.innerHTML = matches.map((m) => `<option value="${m.ticker}">${m.name}</option>`).join('');
+      }).catch(() => {
+        /* keep the last suggestions */
+      });
+    }, 150);
+  });
+  watchQuery.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      addSymbol(watchQuery.value);
+      watchQuery.value = '';
+      watchHits.innerHTML = '';
+    }
+  });
   watchRows.addEventListener('click', (event) => {
     const target = event.target as HTMLElement;
+    const remove = target.closest('button[data-remove]')?.getAttribute('data-remove');
+    if (remove !== null && remove !== undefined) {
+      watchSymbols = watchSymbols.filter((s) => s !== remove);
+      if (watchSymbols.length === 0) {
+        watchSymbols = [...WATCH_DEFAULTS];
+      }
+      saveWatch();
+      if (selected === remove) {
+        selected = watchSymbols[0] ?? 'NVDO';
+      }
+      renderWatchlist();
+      return;
+    }
     const button = target.closest('button[data-symbol]');
     const symbol = button?.getAttribute('data-symbol');
     if (symbol === null || symbol === undefined) {
@@ -137,6 +218,7 @@ export function mountPanels(
   return {
     destroy() {
       window.clearInterval(rivalTimer);
+      window.clearTimeout(queryTimer);
       for (const unsubscribe of unsubscribers) {
         unsubscribe();
       }

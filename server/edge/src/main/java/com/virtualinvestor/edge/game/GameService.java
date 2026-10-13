@@ -83,6 +83,10 @@ public class GameService {
         return symbolSearch.search(query, limit);
     }
 
+    public List<Instrument> chain(String underlying) {
+        return symbolSearch.chain(underlying);
+    }
+
     /** Create a round with a fresh seed, participants and a session token for the player. */
     public RoundView createRound(LaunchConfig config) {
         return createRound(config, List.<String>of(), true,
