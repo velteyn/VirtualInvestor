@@ -84,4 +84,29 @@ class MarketMakerDerivativesTest {
         }
         return round;
     }
+
+    @Test
+    void fastSessionPrintsTradesWithoutKillingTicks() {
+        // Dead-market-makers: crossed sub-tick series quotes used to throw
+        // mid-fill, aborting every tick — books drained, nothing ever printed.
+        // A 15-minute session at 100ms steps reaches continuous at tick 630.
+        // Bank tariffs on every seat (like the edge wireTariffs) so the
+        // validating series-fee path is live, as in production.
+        RunningRound round = new RunningRound("round-soak", 64L,
+                new LaunchConfig(100_000.0, 15L, RealismPreset.REALISTIC), 100L);
+        round.start();
+        for (var participant : round.participants()) {
+            round.setFeeSchedule(participant.id(),
+                    FeeSchedule.fixed(0.01, 2.0, 0.001, 1.0));
+        }
+        long prints = 0L;
+        for (int i = 0; i < 1500; i++) {
+            for (GameEvent event : round.step()) {
+                if (event instanceof GameEvent.TradePrinted) {
+                    prints++;
+                }
+            }
+        }
+        assertTrue(prints > 0, "a 1500-tick session must print trades, got none");
+    }
 }

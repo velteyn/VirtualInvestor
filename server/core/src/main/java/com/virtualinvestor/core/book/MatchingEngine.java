@@ -20,6 +20,13 @@ public final class MatchingEngine {
         if (incoming.quantity() <= 0L) {
             throw new IllegalArgumentException("quantity must be positive");
         }
+        // Invalid limit prices never reach the book: bot ladders on sub-tick
+        // references (dead-market-makers) would otherwise rest or match at
+        // zero/negative prices and poison downstream accounting.
+        if (incoming.type() == OrderType.LIMIT
+                && (!Double.isFinite(incoming.limitPrice()) || incoming.limitPrice() <= 0.0)) {
+            return new MatchResult(List.of(), 0L, false, "limit price must be a positive number");
+        }
 
         List<Fill> fills = new ArrayList<>();
         long remaining = incoming.quantity();

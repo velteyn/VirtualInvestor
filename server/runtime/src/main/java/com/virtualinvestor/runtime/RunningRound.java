@@ -787,9 +787,13 @@ public final class RunningRound {
         }
         // Broker tariffs (player-accounts 5.1): each counterparty pays its own bank's
         // schedule on the fill — percentage of notional for series — deducted from
-        // cash and accumulated visibly as fees paid.
+        // cash and accumulated visibly as fees paid. The notional is clamped so a
+        // bad-price fill can never throw mid-accounting and abort the tick
+        // (dead-market-makers); with valid books it is always the raw notional.
         if (series.isPresent()) {
-            account.debitFee(feesFor(participantId).feeForSeries(quantity, quantity * price));
+            double notional = quantity * price;
+            double safeNotional = Double.isFinite(notional) ? Math.max(0.0, notional) : 0.0;
+            account.debitFee(feesFor(participantId).feeForSeries(quantity, safeNotional));
         } else {
             account.debitFee(feesFor(participantId).feeFor(quantity));
         }

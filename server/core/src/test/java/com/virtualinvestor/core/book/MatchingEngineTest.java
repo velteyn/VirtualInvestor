@@ -88,4 +88,20 @@ class MatchingEngineTest {
         assertFalse(result.rested());
         assertNull(book.peekBest(OrderSide.BUY));
     }
+
+    @Test
+    void limitOrdersWithInvalidPricesAreRejected() {
+        for (double price : new double[] {-5.0, 0.0, Double.NaN}) {
+            OrderBook book = new OrderBook("ACME");
+            book.add(ask("a1", 100.00, 30));
+
+            MatchResult result = engine.match(book, incoming("t1", OrderSide.BUY, OrderType.LIMIT, 10, price));
+
+            assertTrue(result.rejected(), "price " + price + " must be rejected");
+            assertEquals("limit price must be a positive number", result.rejection());
+            assertEquals(0, result.filledQuantity());
+            assertFalse(result.rested());
+            assertEquals(30, book.get("a1").remaining(), "book untouched for price " + price);
+        }
+    }
 }

@@ -206,7 +206,15 @@ final class BotRunner {
                 continue;
             }
             Quote.Level rung = quote.bidLevels().get(level);
-            desired.add(new DesiredLevel(OrderSide.BUY, round(rung.price()),
+            double price = round(rung.price());
+            if (!Double.isFinite(price) || price <= 0.0) {
+                // Sub-tick references (far-OOM series) round rungs to zero or
+                // below: skip the rung instead of posting an invalid quote
+                // (dead-market-makers).
+                desired.add(null);
+                continue;
+            }
+            desired.add(new DesiredLevel(OrderSide.BUY, price,
                     Math.round(rung.size() * size / (double) maker.baseSize())));
         }
         for (int level = 0; level < quote.askLevels().size(); level++) {
@@ -215,7 +223,12 @@ final class BotRunner {
                 continue;
             }
             Quote.Level rung = quote.askLevels().get(level);
-            desired.add(new DesiredLevel(OrderSide.SELL, round(rung.price()),
+            double price = round(rung.price());
+            if (!Double.isFinite(price) || price <= 0.0) {
+                desired.add(null);
+                continue;
+            }
+            desired.add(new DesiredLevel(OrderSide.SELL, price,
                     Math.round(rung.size() * size / (double) maker.baseSize())));
         }
 
