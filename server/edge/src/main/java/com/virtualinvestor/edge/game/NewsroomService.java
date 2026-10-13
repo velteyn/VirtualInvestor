@@ -47,6 +47,8 @@ public class NewsroomService {
         return thread;
     });
     private final Map<String, AtomicInteger> counts = new ConcurrentHashMap<>();
+    /** Latest tick observed per round, fed from the event stream. */
+    private final Map<String, Long> roundTicks = new ConcurrentHashMap<>();
 
     public NewsroomService(Narrator narrator, javax.sql.DataSource dataSource,
             MarketBroadcaster broadcaster) {
@@ -106,13 +108,30 @@ public class NewsroomService {
         });
     }
 
+    /** Track the round clock so stale releases can be shed before generating. */
+    public void noteTick(String roundId, long tick) {
+        roundTicks.merge(roundId, tick, Math::max);
+    }
+
+    /** A release whose validity window closed before its turn is pure waste. */
+    static boolean isStale(long releaseTick, long durationTicks, Long nowTick) {
+        return nowTick != null && nowTick - releaseTick > durationTicks;
+    }
+
     /** Forget per-round counts with the round (room expiry, settle). */
     public void forget(String roundId) {
         counts.remove(roundId);
+        roundTicks.remove(roundId);
     }
 
     private void write(String roundId, GameEvent.NewsReleased news, ArticleStore.Kind kind) {
         try {
+            Long now = roundTicks.get(roundId);
+            if (isStale(news.tick(), news.durationTicks(), now)) {
+                log.info("newsroom stale-skipped {} (lag {} ticks)", news.newsId(), now - news.tick());
+                return;
+            }
+            long startNanos = System.nanoTime();
             List<String> tickers = news.symbol() == null ? List.of() : List.of(news.symbol());
             List<String> names = new ArrayList<>();
             for (String ticker : tickers) {
@@ -120,10 +139,18 @@ public class NewsroomService {
             }
             Narrator.Request request = new Narrator.Request(news.newsId(), kind.name(), news.headline(),
                     news.scope().name(), tickers, news.sector(), names, news.magnitude(), news.tick());
-            narrator.narrate(request).ifPresent(draft -> {
+            var draft = narrator.narrate(request);
+            long elapsedMillis = (System.nanoTime() - startNanos) / 1_000_000L;
+            if (draft.isEmpty()) {
+                log.info("newsroom declined {} in {}ms", news.newsId(), elapsedMillis);
+                return;
+            }
+            log.info("newsroom article {} published in {}ms", news.newsId(), elapsedMillis);
+            Narrator.Draft body = draft.orElseThrow();
+            {
                 ArticleStore.Article article = new ArticleStore.Article(request.newsId(), roundId,
-                        request.tick(), kind, request.tickers(), news.headline(), draft.body(),
-                        draft.model());
+                        request.tick(), kind, request.tickers(), news.headline(), body.body(),
+                        body.model());
                 try {
                     articles.save(article);
                 } catch (Exception e) {
@@ -133,9 +160,9 @@ public class NewsroomService {
                 // Same newsId, same addressing, original stage: only the body fills in,
                 // so the feed upsert is a pure content update.
                 broadcaster.broadcast(roundId, new WireMessage.NewsDto(news.newsId(), news.source(),
-                        news.scope().name(), news.symbol(), news.sector(), news.headline(), draft.body(),
+                        news.scope().name(), news.symbol(), news.sector(), news.headline(), body.body(),
                         news.magnitude(), news.durationTicks(), news.stage().name(), news.tick()));
-            });
+            }
         } catch (Exception e) {
             log.warn("newsroom write failed for {}: {}", news.newsId(), e.toString());
         }

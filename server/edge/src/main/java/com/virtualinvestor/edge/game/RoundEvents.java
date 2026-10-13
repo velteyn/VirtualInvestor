@@ -25,7 +25,9 @@ final class RoundEvents implements EventPublisher {
     public void publish(List<GameEvent> events, long sequence) {
         if (newsroom != null) {
             for (GameEvent event : events) {
-                if (event instanceof GameEvent.NewsReleased news) {
+                if (event instanceof GameEvent.Tick tick) {
+                    newsroom.noteTick(roundId, tick.tick());
+                } else if (event instanceof GameEvent.NewsReleased news) {
                     newsroom.accept(roundId, news);
                 } else if (event instanceof GameEvent.RoundSettled settled) {
                     newsroom.recap(roundId, settled.tick());

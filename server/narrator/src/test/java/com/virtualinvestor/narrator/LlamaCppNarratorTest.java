@@ -83,6 +83,38 @@ class LlamaCppNarratorTest {
     }
 
     @Test
+    void promptAsksForTightArticles() {
+        assertTrue(LlamaCppNarrator.promptFor(earnings()).contains("at most 80 words"));
+    }
+
+    @Test
+    void payloadCapsPredictions() throws Exception {
+        AtomicReference<String> seen = new AtomicReference<>();
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/completion", exchange -> {
+            seen.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            byte[] body = "{\"content\":\"Pear beat.\",\"stop\":true}".getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+        server.start();
+        try {
+            Narrator narrator = new LlamaCppNarrator(
+                    URI.create("http://127.0.0.1:" + server.getAddress().getPort()),
+                    Duration.ofSeconds(5), "llama-test");
+
+            narrator.narrate(earnings());
+
+            assertTrue(seen.get() != null && seen.get().contains("\"n_predict\":100"),
+                    "payload must cap predictions at " + LlamaCppNarrator.N_PREDICT);
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
     void subjectlessPromptNamesNoCompanies() {
         Narrator.Request preview = new Narrator.Request("preview-r1", "PREVIEW",
                 "Round round-1 opens: REALISTIC session", "MACRO", List.of(), null, List.of(), 0.0, 0L);

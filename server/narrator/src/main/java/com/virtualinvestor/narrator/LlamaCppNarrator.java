@@ -46,6 +46,10 @@ public final class LlamaCppNarrator implements Narrator {
     private final String model;
     private final HttpClient http;
 
+    /** Generation cap: 100 tokens reads complete at ~15-20s on the playtest
+      * box; 160 doubles cost, 60 cuts mid-sentence (narrator-throughput). */
+    static final int N_PREDICT = 100;
+
     public LlamaCppNarrator(URI endpoint, Duration timeout, String model) {
         this.endpoint = Objects.requireNonNull(endpoint, "endpoint");
         this.timeout = Objects.requireNonNull(timeout, "timeout");
@@ -60,7 +64,7 @@ public final class LlamaCppNarrator implements Narrator {
         }
         try {
             String payload = "{\"prompt\":" + jsonString(promptFor(request))
-                    + ",\"n_predict\":160,\"temperature\":0.7,\"repeat_penalty\":1.15,\"repeat_last_n\":64,"
+                    + ",\"n_predict\":" + N_PREDICT + ",\"temperature\":0.7,\"repeat_penalty\":1.15,\"repeat_last_n\":64,"
                     + "\"penalize_nl\":false,\"stop\":[\"\\n\\n\\n\"]}";
             HttpRequest httpRequest = HttpRequest.newBuilder(endpoint.resolve("/completion"))
                     .timeout(timeout)
@@ -89,8 +93,8 @@ public final class LlamaCppNarrator implements Narrator {
         boolean named = !request.subjectNames().isEmpty();
         String subjects = named ? String.join(", ", request.subjectNames()) : "the broad market";
         return "You are an economic journalist covering a fictional stock market. "
-                + "Describe the financial situation in these facts in 3 to 5 vivid sentences, "
-                + "at most 120 words, using ONLY what is given. "
+                + "Describe the financial situation in these facts in 2 to 4 vivid sentences, "
+                + "at most 80 words, using ONLY what is given. "
                 + "Never invent prices, percentages, dollar amounts, or deal values. "
                 + "Never add disclaimers, investment advice, warnings, or moral judgments. "
                 + "End with the situation, nothing else. "

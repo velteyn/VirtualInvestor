@@ -27,4 +27,25 @@ class NewsroomServiceTest {
     void randomCompanyNoiseSkipped() {
         assertNull(NewsroomService.kindOf(release("rand-9", NewsScope.COMPANY)));
     }
+
+    @Test
+    void stalenessNeedsAClock() {
+        // Unknown tick (old rounds): never shed, narrate as today.
+        assertEquals(false, NewsroomService.isStale(5400L, 100L, null));
+    }
+
+    @Test
+    void freshReleaseSurvives() {
+        assertEquals(false, NewsroomService.isStale(5400L, 100L, 5450L));
+    }
+
+    @Test
+    void expiredReleaseSheds() {
+        assertEquals(true, NewsroomService.isStale(5400L, 100L, 5600L));
+    }
+
+    @Test
+    void boundaryReleaseSurvives() {
+        assertEquals(false, NewsroomService.isStale(5400L, 100L, 5500L));
+    }
 }
