@@ -95,6 +95,25 @@ export function mountPanels(
     }
   };
   let selected = watchSymbols[0] ?? 'NVDO';
+  // Seed last prints from history so rows show prices from the first second
+  // (join-price-seed). Seed-only: live prints overwrite on arrival.
+  for (const symbol of watchSymbols) {
+    if (prices.has(symbol)) {
+      continue;
+    }
+    void client.getHistory(round.roundId, symbol).then((bars) => {
+      if (prices.has(symbol) || bars.length === 0) {
+        return;
+      }
+      const close = Number(bars[bars.length - 1].close);
+      if (Number.isFinite(close) && close > 0) {
+        prices.set(symbol, close);
+        renderWatchlist();
+      }
+    }).catch(() => {
+      /* dashes until the first print, as today */
+    });
+  }
   const watchQuery = column.querySelector('.vi-watch-q') as HTMLInputElement;
   const watchHits = column.querySelector('#vi-watch-hits') as HTMLElement;
   const renderWatchlist = (): void => {

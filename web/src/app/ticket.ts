@@ -520,6 +520,33 @@ export function mountTicket(
     });
   };
   const legRow = section.querySelector<HTMLDivElement>('#vi-tk-leg')!;
+  /** Seed marks/touch from the last history close when no live print exists
+    * yet, so the ticket has prices from the first second (join-price-seed).
+    * Seed-only: live prints and depth always win. Touch seeds as last close
+    * on both sides — a stand-in until the first real depth frame. */
+  const seedMarks = (ticker: string): void => {
+    if (marks.has(ticker)) {
+      return;
+    }
+    void client.getHistory(round.roundId, ticker).then((bars) => {
+      if (marks.has(ticker) || bars.length === 0) {
+        return;
+      }
+      const close = Number(bars[bars.length - 1].close);
+      if (!Number.isFinite(close) || close <= 0) {
+        return;
+      }
+      marks.set(ticker, close);
+      if (!touch.has(ticker)) {
+        touch.set(ticker, { bid: close, ask: close });
+      }
+      followTouch();
+      renderLadder();
+      renderPreview();
+    }).catch(() => {
+      /* dark until the first print, as today */
+    });
+  };
   /** Strike ladder for Options mode: live mark premium else reference, ITM badged. */
   const renderLadder = (): void => {
     if (mode !== 'OPTIONS') {
@@ -605,12 +632,14 @@ export function mountTicket(
   };
   refreshQty();
   loadChain(underlying());
+  seedMarks(underlying());
   symbolSelect.addEventListener('change', () => {
     refreshQty();
     limitDirty = false;
     stopDirty = false;
     followTouch();
     loadChain(underlying());
+    seedMarks(underlying());
     renderPreview();
   });
   seriesSelect.addEventListener('change', () => {

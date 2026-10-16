@@ -14,6 +14,8 @@ function mount() {
       return () => undefined;
     },
     searchSymbols: vi.fn(async () => [{ ticker: 'NVDO-C640', name: 'Nvido 640 Call' }]),
+    getHistory: vi.fn(async (roundId: string, symbol: string) =>
+      [{ time: 1, open: 639, high: 641, low: 638, close: symbol === 'NVDO' ? 632.5 : 100, volume: 100 }]),
     getLeaderboard: vi.fn(async () => [
       { rank: 1, participantId: 'r1', displayName: 'MARK', equity: 110_000, startingCapital: 100_000, returnFraction: 0.1 },
     ]),
@@ -83,6 +85,15 @@ describe('panels mount', () => {
     const rows = [...layout.querySelectorAll('.vi-watchlist [data-symbol]')]
       .map((b) => b.getAttribute('data-symbol'));
     expect(rows).not.toContain('PEAR');
+    panels.destroy();
+  });
+
+  it('seeds watchlist prices from history with no live prints', async () => {
+    const { layout, panels } = mount();
+    await flush();
+    await flush();
+    const text = layout.querySelector('.vi-watchlist')?.textContent ?? '';
+    expect(text).toContain('632.5');
     panels.destroy();
   });
 

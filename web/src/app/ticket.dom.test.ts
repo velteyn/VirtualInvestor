@@ -25,6 +25,7 @@ function mount(options: { chainFails?: boolean } = {}) {
     chain: options.chainFails
       ? vi.fn(async () => { throw new Error('404'); })
       : vi.fn(async () => CHAIN),
+    getHistory: vi.fn(async () => [{ time: 1, open: 639, high: 641, low: 638, close: 640.25, volume: 100 }]),
     banks: vi.fn(async () => [BANK]),
     bankOfPlayer: () => 'b1',
     onPayload: () => () => undefined,
@@ -163,6 +164,23 @@ describe('ticket mount', () => {
     column.querySelector<HTMLButtonElement>('[data-mode="OPTIONS"]')?.click();
     await flush();
     expect(column.querySelectorAll('[data-strike]').length).toBeGreaterThan(0);
+    ticket.destroy();
+  });
+
+  it('seeds the limit from history with no live prints', async () => {
+    const { column, ticket } = mount();
+    await flush();
+    await flush();
+    column.querySelector<HTMLSelectElement>('#vi-tk-symbol')!.value = 'NVDO';
+    column.querySelector<HTMLSelectElement>('#vi-tk-symbol')!
+      .dispatchEvent(new Event('change', { bubbles: true }));
+    await flush();
+    await flush();
+    column.querySelector<HTMLSelectElement>('#vi-tk-type')!.value = 'LIMIT';
+    column.querySelector<HTMLSelectElement>('#vi-tk-type')!
+      .dispatchEvent(new Event('change', { bubbles: true }));
+    await flush();
+    expect(column.querySelector<HTMLInputElement>('#vi-tk-limit')?.value).toBe('640.25');
     ticket.destroy();
   });
 });
