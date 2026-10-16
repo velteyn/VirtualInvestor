@@ -76,19 +76,23 @@ class WorldJournalPersistenceTest {
         List<SequencedEvent> stored = log.readFrom(1L);
         assertTrue(stored.size() > 0, "events should be persisted");
         for (int i = 1; i < stored.size(); i++) {
-            assertEquals(stored.get(i - 1).seq() + 1L, stored.get(i).seq(), "sequence is contiguous");
+            assertTrue(stored.get(i).seq() > stored.get(i - 1).seq(), "sequence increases");
         }
         // A snapshot was written by the cadence, so recovery does not replay from scratch.
         assertTrue(snapshots.latest().isPresent(), "a checkpoint should exist");
 
-        // Recovery from snapshot + tail equals the snapshotted prefix plus the tail,
-        // even though the log itself now holds only the tail (compaction). The
-        // boundary row lives in both, so it counts once.
+        // Recovery from snapshot + tail equals the snapshotted prefix plus every
+        // stored row past the snapshot boundary. Compaction now deletes only
+        // consumed Tick scaffolding, so fills/reports/prints survive in the log
+        // and the stored stream is a superset of the recovery tail.
         List<GameEvent> recovered = com.virtualinvestor.persist.snapshot.Recovery.recover(log, snapshots);
         List<GameEvent> prefix = com.virtualinvestor.persist.snapshot.WorldStateCodec.decode(
                 snapshots.latest().orElseThrow().state());
-        List<GameEvent> tail = stored.stream().map(SequencedEvent::event).toList();
-        assertEquals(prefix.size() + tail.size() - 1, recovered.size());
-        assertEquals(tail.subList(1, tail.size()), recovered.subList(prefix.size(), recovered.size()));
+        long snapshotSeq = snapshots.latest().orElseThrow().seq();
+        List<GameEvent> expectedTail = stored.stream()
+                .filter(row -> row.seq() > snapshotSeq)
+                .map(SequencedEvent::event).toList();
+        assertEquals(prefix.size() + expectedTail.size(), recovered.size());
+        assertEquals(expectedTail, recovered.subList(prefix.size(), recovered.size()));
     }
 }

@@ -14,7 +14,7 @@ class NewsItemTest {
     private static NewsItem item(NewsSource source, NewsScope scope, String symbol, String sector,
                                  String headline, String body, double direction, double magnitude) {
         return new NewsItem("n1", source, scope, symbol, sector, headline, body,
-                direction, magnitude, 300L, NewsStage.RUMOR, 10L);
+                direction, magnitude, 300L, NewsStage.RUMOR, 10L, 0.5, 100L, true);
     }
 
     @Test

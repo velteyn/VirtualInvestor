@@ -21,7 +21,10 @@ public record NewsItem(
         double magnitude,
         long durationTicks,
         NewsStage stage,
-        long tick) {
+        long tick,
+        double rumorFraction,
+        long resolutionDelayTicks,
+        boolean confirmed) {
 
     public NewsItem {
         requireText(id, "id");
@@ -46,6 +49,12 @@ public record NewsItem(
         }
         if (FictionalNames.containsRealName(headline) || FictionalNames.containsRealName(body)) {
             throw new IllegalArgumentException("news text references a real company or outlet");
+        }
+        if (rumorFraction <= 0.0 || rumorFraction > 1.0) {
+            throw new IllegalArgumentException("rumorFraction must be within (0, 1]");
+        }
+        if (resolutionDelayTicks < 0L) {
+            throw new IllegalArgumentException("resolutionDelayTicks must not be negative");
         }
     }
 

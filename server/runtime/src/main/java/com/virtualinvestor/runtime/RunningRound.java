@@ -264,9 +264,9 @@ public final class RunningRound {
         List<NewsItem> timeline = new NewsGenerator(universe, streams, RANDOM_NEWS_TICKS, 0.30)
                 .generate(0L, durationTicks);
         List<PlannedNews> planned = new ArrayList<>(timeline.size());
-        for (int i = 0; i < timeline.size(); i++) {
-            NewsItem item = timeline.get(i);
-            planned.add(new PlannedNews(item, item.tick() + durationTicks / 10L, i % 2 == 0, 0.5));
+        for (NewsItem item : timeline) {
+            planned.add(new PlannedNews(item, item.tick() + item.resolutionDelayTicks(),
+                    item.confirmed(), item.rumorFraction()));
         }
         this.news = new NewsEngine(fundamentals, planned);
         news.setVolatilityState(volatility);

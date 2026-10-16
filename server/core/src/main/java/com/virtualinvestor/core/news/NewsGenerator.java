@@ -80,7 +80,10 @@ public final class NewsGenerator {
                     magnitude,
                     validityTicks(sessionTicks, NewsScope.COMPANY, magnitude),
                     NewsStage.CONFIRMED,
-                    tick));
+                    tick,
+                    0.5,
+                    sessionTicks / 10L,
+                    false));
         }
 
         int randomCount = (int) (sessionTicks / ticksPerRandomEvent);
@@ -119,10 +122,83 @@ public final class NewsGenerator {
                     magnitude,
                     validityTicks(sessionTicks, scope, magnitude),
                     NewsStage.RUMOR,
-                    tick));
+                    tick,
+                    0.5,
+                    sessionTicks / 10L,
+                    false));
+        }
+
+        List<NewsItem> scenarios = planScenarios(random, equities, startTick, sessionTicks);
+        java.util.Set<String> scenarioIds = new java.util.HashSet<>();
+        for (NewsItem scenario : scenarios) {
+            scenarioIds.add(scenario.id());
+            items.add(scenario);
         }
 
         items.sort(Comparator.comparingLong(NewsItem::tick).thenComparing(NewsItem::id));
-        return List.copyOf(items);
+        // Legacy uniform staging for everything the deck did not stage: 50/50
+        // split, session/10 delay, alternating confirm by timeline position —
+        // exactly what the runtime mapping produced before the deck existed.
+        List<NewsItem> staged = new ArrayList<>(items.size());
+        for (int index = 0; index < items.size(); index++) {
+            NewsItem item = items.get(index);
+            if (scenarioIds.contains(item.id())) {
+                staged.add(item);
+                continue;
+            }
+            staged.add(new NewsItem(
+                    item.id(), item.source(), item.scope(), item.symbol(), item.sector(),
+                    item.headline(), item.body(), item.direction(), item.magnitude(),
+                    item.durationTicks(), item.stage(), item.tick(),
+                    0.5, sessionTicks / 10L, index % 2 == 0));
+        }
+        return List.copyOf(staged);
+    }
+
+    /**
+     * Rare staged scenarios (market-scenarios): takeover bids, scandals, crashes,
+     * squeezes, macro shocks and stampedes as rumor → confirm/deny arcs. Fully
+     * staged here (fraction, delay, confirm draw); the runtime stages every
+     * other item with the legacy uniform mapping.
+     */
+    static List<NewsItem> planScenarios(
+            DeterministicRandom random, List<Instrument> equities, long startTick, long sessionTicks) {
+        int count = 1 + (int) Math.floor(random.nextDouble() * 3.0);
+        List<NewsItem> scenarios = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            ScenarioDeck.Entry entry = ScenarioDeck.ENTRIES.get(random.nextInt(ScenarioDeck.ENTRIES.size()));
+            double base = 0.12 + 0.24 * i + random.nextDouble() * 0.06;
+            long tick = startTick + (long) (sessionTicks * Math.min(base, 0.94));
+            Instrument instrument = equities.get(random.nextInt(equities.size()));
+            double magnitude = entry.minMagnitude()
+                    + random.nextDouble() * (entry.maxMagnitude() - entry.minMagnitude());
+            long delay = (long) (sessionTicks * (entry.minDelayFraction()
+                    + random.nextDouble() * (entry.maxDelayFraction() - entry.minDelayFraction())));
+            long resolutionTick = Math.min(tick + delay, startTick + (long) (sessionTicks * 0.98));
+            double direction = entry.fixedDirection() == 0.0
+                    ? (random.nextDouble() < 0.5 ? 1.0 : -1.0)
+                    : entry.fixedDirection();
+            boolean confirmed = random.nextDouble() < entry.confirmBias();
+            String name = instrument.name();
+            String headline = entry.headline().replace("{name}", name).replace("{sector}", instrument.sector());
+            String sector = entry.scope() == NewsScope.SECTOR ? instrument.sector() : null;
+            scenarios.add(new NewsItem(
+                    "scen-" + entry.key() + "-" + i,
+                    entry.source(),
+                    entry.scope(),
+                    entry.scope() == NewsScope.COMPANY ? instrument.ticker() : null,
+                    sector,
+                    headline,
+                    entry.body().replace("{name}", name).replace("{sector}", instrument.sector()),
+                    direction,
+                    magnitude,
+                    validityTicks(sessionTicks, entry.scope(), magnitude),
+                    NewsStage.RUMOR,
+                    tick,
+                    entry.rumorFraction(),
+                    Math.max(1L, resolutionTick - tick),
+                    confirmed));
+        }
+        return List.copyOf(scenarios);
     }
 }

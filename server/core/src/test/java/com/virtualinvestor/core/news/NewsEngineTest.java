@@ -27,7 +27,7 @@ class NewsEngineTest {
 
     private static NewsItem rumor(double direction, double magnitude) {
         return new NewsItem("n1", NewsSource.THE_WIRE, NewsScope.COMPANY, "HIGH1", "Semis",
-                "Rumour of a deal", "Wire report", direction, magnitude, 100L, NewsStage.RUMOR, 10L);
+                "Rumour of a deal", "Wire report", direction, magnitude, 100L, NewsStage.RUMOR, 10L, 0.5, 100L, true);
     }
 
     @Test

@@ -83,9 +83,9 @@ class BotOnlyRoundTest {
                 universe, new com.virtualinvestor.core.random.RandomStreams(seed), 300L, 0.2)
                 .generate(0L, SESSION_TICKS);
         List<PlannedNews> planned = new ArrayList<>();
-        for (int i = 0; i < generated.size(); i++) {
-            NewsItem item = generated.get(i);
-            planned.add(new PlannedNews(item, item.tick() + SESSION_TICKS / 10L, i % 2 == 0, 0.5));
+        for (NewsItem item : generated) {
+            planned.add(new PlannedNews(item, item.tick() + item.resolutionDelayTicks(),
+                    item.confirmed(), item.rumorFraction()));
         }
         NewsEngine news = new NewsEngine(model, planned);
         news.setVolatilityState(volatility);
