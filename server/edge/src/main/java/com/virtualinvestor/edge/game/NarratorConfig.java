@@ -29,8 +29,11 @@ public class NarratorConfig {
             case "disabled" -> new DisabledNarrator();
             case "llama" -> new LlamaCppNarrator(
                     java.net.URI.create(System.getenv().getOrDefault("VI_NARRATOR_URL", "http://127.0.0.1:18080")),
+                    // Slow important work must not be killed mid-generation:
+                    // arc beats queue behind a full desk, so the fuse covers
+                    // worst-case CPU contention, not just model speed.
                     java.time.Duration.ofMillis(Long.parseLong(
-                            System.getenv().getOrDefault("VI_NARRATOR_TIMEOUT_MS", "60000"))),
+                            System.getenv().getOrDefault("VI_NARRATOR_TIMEOUT_MS", "120000"))),
                     System.getenv().getOrDefault("VI_NARRATOR_MODEL", "qwen2.5-3b-q4_k_m"));
             default -> {
                 if (!mode.equals("template")) {

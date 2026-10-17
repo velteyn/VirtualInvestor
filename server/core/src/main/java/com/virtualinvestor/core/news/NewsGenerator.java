@@ -167,38 +167,56 @@ public final class NewsGenerator {
         List<NewsItem> scenarios = new ArrayList<>();
         for (int i = 0; i < count; i++) {
             ScenarioDeck.Entry entry = ScenarioDeck.ENTRIES.get(random.nextInt(ScenarioDeck.ENTRIES.size()));
-            double base = 0.12 + 0.24 * i + random.nextDouble() * 0.06;
-            long tick = startTick + (long) (sessionTicks * Math.min(base, 0.94));
             Instrument instrument = equities.get(random.nextInt(equities.size()));
-            double magnitude = entry.minMagnitude()
+            double total = entry.minMagnitude()
                     + random.nextDouble() * (entry.maxMagnitude() - entry.minMagnitude());
-            long delay = (long) (sessionTicks * (entry.minDelayFraction()
-                    + random.nextDouble() * (entry.maxDelayFraction() - entry.minDelayFraction())));
-            long resolutionTick = Math.min(tick + delay, startTick + (long) (sessionTicks * 0.98));
             double direction = entry.fixedDirection() == 0.0
                     ? (random.nextDouble() < 0.5 ? 1.0 : -1.0)
                     : entry.fixedDirection();
-            boolean confirmed = random.nextDouble() < entry.confirmBias();
-            String name = instrument.name();
-            String headline = entry.headline().replace("{name}", name).replace("{sector}", instrument.sector());
-            String sector = entry.scope() == NewsScope.SECTOR ? instrument.sector() : null;
-            scenarios.add(new NewsItem(
-                    "scen-" + entry.key() + "-" + i,
-                    entry.source(),
-                    entry.scope(),
-                    entry.scope() == NewsScope.COMPANY ? instrument.ticker() : null,
-                    sector,
-                    headline,
-                    entry.body().replace("{name}", name).replace("{sector}", instrument.sector()),
-                    direction,
-                    magnitude,
-                    validityTicks(sessionTicks, entry.scope(), magnitude),
-                    NewsStage.RUMOR,
-                    tick,
-                    entry.rumorFraction(),
-                    Math.max(1L, resolutionTick - tick),
-                    confirmed));
+            String storyId = "scen-" + entry.key() + "-" + i;
+            // Beats chain forward: each rumor lands just after the previous
+            // beat's resolution, so the fundamental path stays continuous.
+            long tick = startTick + (long) (sessionTicks * Math.min(scenarioBase(i, random), 0.94));
+            List<ScenarioDeck.Beat> beats = entry.beats();
+            for (int b = 0; b < beats.size(); b++) {
+                ScenarioDeck.Beat beat = beats.get(b);
+                // Beats never run past the close; in a cramped slot they bunch
+                // (tick order still holds, ids sort the ties).
+                tick = Math.min(tick, startTick + (long) (sessionTicks * 0.96));
+                double magnitude = total * beat.magnitudeShare();
+                long delay = (long) (sessionTicks * (beat.minDelayFraction()
+                        + random.nextDouble() * (beat.maxDelayFraction() - beat.minDelayFraction())));
+                long resolutionTick = Math.min(tick + delay, startTick + (long) (sessionTicks * 0.98));
+                // Middle beats always continue the arc; only the finale draws
+                // its fate, so a deny lands once, at the end, like today.
+                boolean confirmed = b < beats.size() - 1 || random.nextDouble() < beat.confirmBias();
+                String name = instrument.name();
+                String headline = beat.headline().replace("{name}", name).replace("{sector}", instrument.sector());
+                String sector = entry.scope() == NewsScope.SECTOR ? instrument.sector() : null;
+                scenarios.add(new NewsItem(
+                        StoryIds.beatId(storyId, b),
+                        entry.source(),
+                        entry.scope(),
+                        entry.scope() == NewsScope.COMPANY ? instrument.ticker() : null,
+                        sector,
+                        headline,
+                        beat.body().replace("{name}", name).replace("{sector}", instrument.sector()),
+                        direction,
+                        magnitude,
+                        validityTicks(sessionTicks, entry.scope(), magnitude),
+                        NewsStage.RUMOR,
+                        tick,
+                        beat.rumorFraction(),
+                        Math.max(1L, resolutionTick - tick),
+                        confirmed));
+                tick = resolutionTick + (long) (sessionTicks * 0.01);
+            }
         }
         return List.copyOf(scenarios);
+    }
+
+    /** Arc start slots: ≥12% in, ≥18% apart, under 94% of the session. */
+    private static double scenarioBase(int index, DeterministicRandom random) {
+        return 0.12 + 0.24 * index + random.nextDouble() * 0.06;
     }
 }

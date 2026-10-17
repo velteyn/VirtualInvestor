@@ -15,7 +15,7 @@ class LlamaCppNarratorTest {
 
     private static Narrator.Request earnings() {
         return new Narrator.Request("sched-PEAR", "EARNINGS", "Pear Computers Inc beats quarterly expectations",
-                "COMPANY", List.of("PEAR"), "Consumer Tech", List.of("Pear Computers Inc"), 0.025, 5400L);
+                "COMPANY", List.of("PEAR"), "Consumer Tech", List.of("Pear Computers Inc"), 0.025, 5400L, "", "");
     }
 
     private static HttpServer stub(String contentJson) throws Exception {
@@ -49,8 +49,22 @@ class LlamaCppNarratorTest {
     }
 
     @Test
-    void dropsBodyNamingReality() throws Exception {
-        HttpServer server = stub("{\"content\":\"Even Apple could not match Pear. You should buy now.\",\"stop\":true}");
+    void dropsBodyWithSpelledCurrency() throws Exception {
+        HttpServer server = stub("{\"content\":\"Shares steady at 50 cents on the news.\",\"stop\":true}");
+        try {
+            Narrator narrator = new LlamaCppNarrator(
+                    URI.create("http://127.0.0.1:" + server.getAddress().getPort()),
+                    Duration.ofSeconds(5), "llama-test");
+
+            assertTrue(narrator.narrate(earnings()).isEmpty(),
+                    "digit currency figures are fabricated, even spelled out");
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void dropsBodyNamingReality() throws Exception {        HttpServer server = stub("{\"content\":\"Even Apple could not match Pear. You should buy now.\",\"stop\":true}");
         try {
             Narrator narrator = new LlamaCppNarrator(
                     URI.create("http://127.0.0.1:" + server.getAddress().getPort()),
@@ -117,10 +131,28 @@ class LlamaCppNarratorTest {
     @Test
     void subjectlessPromptNamesNoCompanies() {
         Narrator.Request preview = new Narrator.Request("preview-r1", "PREVIEW",
-                "Round round-1 opens: REALISTIC session", "MACRO", List.of(), null, List.of(), 0.0, 0L);
+                "Round round-1 opens: REALISTIC session", "MACRO", List.of(), null, List.of(), 0.0, 0L, "", "");
         String prompt = LlamaCppNarrator.promptFor(preview);
 
         assertTrue(prompt.contains("Name no companies at all"));
+    }
+
+    @Test
+    void beatPromptCarriesMemoryAndBible() {
+        Narrator.Request beat = new Narrator.Request("scen-takeover-0-b1", "EARNINGS",
+                "Bidding war erupts over Pear Computers Inc", "COMPANY", List.of("PEAR"), "Consumer Tech",
+                List.of("Pear Computers Inc"), 0.09, 5500L,
+                "Pear Computers Inc receives takeover approach. PEAR +4.2% since last beat.",
+                "Suitor: Halcyon Capital.");
+        String prompt = LlamaCppNarrator.promptFor(beat);
+
+        assertTrue(prompt.contains("Earlier in this story:"));
+        assertTrue(prompt.contains("PEAR +4.2% since last beat"));
+        assertTrue(prompt.contains("Background facts: Suitor: Halcyon Capital."));
+        assertTrue(!prompt.contains("Continue this developing story"),
+                "no quotable imperatives after the facts");
+        assertTrue(!prompt.contains("Canon facts:"),
+                "Canon reads as a company name to the model");
     }
 
     @Test

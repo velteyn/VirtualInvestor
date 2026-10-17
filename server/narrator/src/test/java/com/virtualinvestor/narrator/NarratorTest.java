@@ -10,7 +10,7 @@ class NarratorTest {
 
     private static Narrator.Request earnings() {
         return new Narrator.Request("sched-PEAR", "EARNINGS", "Pear Computers Inc beats quarterly expectations",
-                "COMPANY", List.of("PEAR"), "Consumer Tech", List.of("Pear Computers Inc"), 0.025, 5400L);
+                "COMPANY", List.of("PEAR"), "Consumer Tech", List.of("Pear Computers Inc"), 0.025, 5400L, "", "");
     }
 
     @Test
@@ -25,7 +25,7 @@ class NarratorTest {
     @Test
     void templateDeclinesBlankHeadline() {
         Narrator.Request blank = new Narrator.Request("x", "MACRO", "  ", "MACRO", List.of(), null,
-                List.of(), 0.01, 1L);
+                List.of(), 0.01, 1L, "", "");
 
         assertTrue(new TemplateNarrator().narrate(blank).isEmpty());
     }

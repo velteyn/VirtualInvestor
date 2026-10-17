@@ -22,7 +22,8 @@ public final class ArticleStore {
         MACRO,
         PREVIEW,
         RECAP,
-        TEMPLATE
+        TEMPLATE,
+        SCENARIO,
     }
 
     public record Article(String newsId, String roundId, long tick, Kind kind, List<String> tickers,

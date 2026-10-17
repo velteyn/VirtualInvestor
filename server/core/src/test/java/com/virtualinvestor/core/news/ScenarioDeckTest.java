@@ -31,18 +31,29 @@ class ScenarioDeckTest {
         return timeline.stream().filter(item -> item.id().startsWith("scen-")).toList();
     }
 
+    private static java.util.Map<String, List<NewsItem>> arcs(List<NewsItem> timeline) {
+        java.util.Map<String, List<NewsItem>> grouped = new java.util.TreeMap<>();
+        for (NewsItem item : scenarios(timeline)) {
+            grouped.computeIfAbsent(StoryIds.storyOf(item.id()), key -> new ArrayList<>()).add(item);
+        }
+        return grouped;
+    }
+
     @Test
     void deckHasSevenValidEntries() {
         assertEquals(7, ScenarioDeck.ENTRIES.size());
         for (ScenarioDeck.Entry entry : ScenarioDeck.ENTRIES) {
             assertTrue(entry.minMagnitude() > 0.0 && entry.maxMagnitude() >= entry.minMagnitude(),
                     entry.key() + " needs a positive magnitude band");
-            assertTrue(entry.rumorFraction() > 0.0 && entry.rumorFraction() <= 1.0,
-                    entry.key() + " needs a valid rumor fraction");
-            assertTrue(entry.confirmBias() >= 0.0 && entry.confirmBias() <= 1.0,
-                    entry.key() + " needs a valid confirm bias");
-            assertTrue(!entry.headline().contains("{name}") || entry.scope() != null,
-                    entry.key() + " headlines resolve against a picked equity");
+            assertTrue(!entry.beats().isEmpty(), entry.key() + " needs at least one beat");
+            for (ScenarioDeck.Beat beat : entry.beats()) {
+                assertTrue(beat.rumorFraction() > 0.0 && beat.rumorFraction() <= 1.0,
+                        entry.key() + " needs a valid rumor fraction");
+                assertTrue(beat.confirmBias() >= 0.0 && beat.confirmBias() <= 1.0,
+                        entry.key() + " needs a valid confirm bias");
+                assertTrue(beat.magnitudeShare() > 0.0,
+                        entry.key() + " beats need a positive share");
+            }
         }
     }
 
@@ -59,20 +70,33 @@ class ScenarioDeckTest {
     @Test
     void pacingHoldsAcrossSeeds() {
         for (long seed = 1L; seed <= 10L; seed++) {
-            List<NewsItem> scen = scenarios(timeline(seed));
-            assertTrue(scen.size() >= 1 && scen.size() <= 3,
-                    "seed " + seed + " planned " + scen.size());
-            List<Long> ticks = scen.stream().map(NewsItem::tick).sorted().toList();
-            for (int i = 0; i < ticks.size(); i++) {
-                assertTrue(ticks.get(i) >= SESSION_TICKS / 10L,
-                        "seed " + seed + " scenario inside the opening 10%");
+            var stories = arcs(timeline(seed));
+            assertTrue(stories.size() >= 1 && stories.size() <= 3,
+                    "seed " + seed + " planned " + stories.size());
+            List<Long> starts = stories.values().stream()
+                    .map(beats -> beats.stream().mapToLong(NewsItem::tick).min().orElseThrow())
+                    .sorted().toList();
+            for (int i = 0; i < starts.size(); i++) {
+                assertTrue(starts.get(i) >= SESSION_TICKS / 10L,
+                        "seed " + seed + " arc inside the opening 10%");
                 if (i > 0) {
-                    assertTrue(ticks.get(i) - ticks.get(i - 1) >= (long) (SESSION_TICKS * 0.15),
-                            "seed " + seed + " scenarios too close");
+                    assertTrue(starts.get(i) - starts.get(i - 1) >= (long) (SESSION_TICKS * 0.15),
+                            "seed " + seed + " arcs too close");
                 }
-                NewsItem item = scen.get(i);
-                assertTrue(item.tick() + item.resolutionDelayTicks() <= SESSION_TICKS,
-                        "seed " + seed + " resolution past the close");
+            }
+            for (var entry : stories.entrySet()) {
+                List<NewsItem> beats = entry.getValue().stream()
+                        .sorted(java.util.Comparator.comparingLong(NewsItem::tick)).toList();
+                for (int b = 1; b < beats.size(); b++) {
+                    assertTrue(beats.get(b).tick() >= beats.get(b - 1).tick(),
+                            "seed " + seed + " beats out of order in " + entry.getKey());
+                }
+                for (NewsItem item : beats) {
+                    assertTrue(item.tick() + item.resolutionDelayTicks() <= SESSION_TICKS,
+                            "seed " + seed + " resolution past the close");
+                    assertTrue(!item.headline().contains("{") && !item.body().contains("{"),
+                            "seed " + seed + " unresolved placeholder in " + item.id());
+                }
             }
         }
     }
@@ -114,6 +138,50 @@ class ScenarioDeckTest {
     void scenarioBodiesStayFictional() {
         for (NewsItem item : scenarios(timeline(99L))) {
             assertEquals(NewsStage.RUMOR, item.stage());
+        }
+    }
+
+    @Test
+    void bibleLookup() {
+        assertTrue(ScenarioDeck.bibleForStory("scen-takeover-0").contains("Halcyon Capital"));
+        assertTrue(!ScenarioDeck.bibleForStory("scen-crash-0").isEmpty());
+        assertEquals("", ScenarioDeck.bibleForStory("sched-PEAR"));
+        assertEquals("", ScenarioDeck.bibleForStory(null));
+    }
+
+    @Test
+    void biblesStayDenylistSafe() {
+        for (ScenarioDeck.Entry entry : ScenarioDeck.ENTRIES) {
+            String bible = entry.bible();
+            assertTrue(!bible.isEmpty(), entry.key() + " has no bible");
+            assertTrue(!FictionalNames.containsRealName(bible),
+                    entry.key() + " bible names a real company: " + bible);
+            assertTrue(bible.chars().noneMatch(Character::isDigit),
+                    entry.key() + " bible carries digits the denylist would decline: " + bible);
+            assertTrue(!bible.contains("%") && !bible.contains("$"),
+                    entry.key() + " bible carries a figure mark: " + bible);
+        }
+    }
+
+    @Test
+    void beatSharesSumToWhole() {
+        for (ScenarioDeck.Entry entry : ScenarioDeck.ENTRIES) {
+            double shares = entry.beats().stream().mapToDouble(ScenarioDeck.Beat::magnitudeShare).sum();
+            assertEquals(1.0, shares, 1e-9, entry.key() + " beats must sum to the arc total");
+        }
+    }
+
+    @Test
+    void storyIdsGroupBeats() {
+        assertTrue(StoryIds.isBeat("scen-takeover-0-b2"));
+        assertEquals("scen-takeover-0", StoryIds.storyOf("scen-takeover-0-b2"));
+        assertEquals("scen-takeover-0-b0", StoryIds.beatId("scen-takeover-0", 0));
+        for (long seed = 1L; seed <= 10L; seed++) {
+            for (var entry : arcs(timeline(seed)).entrySet()) {
+                List<NewsItem> beats = entry.getValue();
+                assertTrue(!beats.isEmpty(), "arc " + entry.getKey() + " is empty");
+                assertTrue(beats.stream().allMatch(b -> StoryIds.storyOf(b.id()).equals(entry.getKey())));
+            }
         }
     }
 }

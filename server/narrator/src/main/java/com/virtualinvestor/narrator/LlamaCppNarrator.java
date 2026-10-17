@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.logging.Logger;
 
 /**
  * llama.cpp sidecar narrator (newsroom-narrator 2.2): POSTs the release facts
@@ -36,15 +37,19 @@ public final class LlamaCppNarrator implements Narrator {
             "careful consideration and research");
 
     /** Invented figures: the model is never given numbers, so any price-like
-     * figure in the body is fabricated. Template bodies never pass through here. */
+     * figure in the body is fabricated. Template bodies never pass through here.
+     * Covers digit forms ($40, 4.2%, 50 cents); memory and bible spell
+     * magnitudes out, so worded numbers stay legal. */
     static final java.util.regex.Pattern DENY_FIGURES =
-            java.util.regex.Pattern.compile("\\$\\s*\\d|\\d\\s*(%|percent(ages)?)",
+            java.util.regex.Pattern.compile("\\$\\s*\\d|\\d\\s*(%|percent(ages)?|cents?|dollars?)",
                     java.util.regex.Pattern.CASE_INSENSITIVE);
 
     private final URI endpoint;
     private final Duration timeout;
     private final String model;
     private final HttpClient http;
+
+    private static final Logger log = Logger.getLogger(LlamaCppNarrator.class.getName());
 
     /** Generation cap: 100 tokens reads complete at ~15-20s on the playtest
       * box; 160 doubles cost, 60 cuts mid-sentence (narrator-throughput). */
@@ -60,6 +65,7 @@ public final class LlamaCppNarrator implements Narrator {
     @Override
     public Optional<Draft> narrate(Request request) {
         if (request == null || request.headline() == null || request.headline().isBlank()) {
+            log.info(() -> "narrator declined " + (request == null ? "null" : request.newsId()) + ": blank");
             return Optional.empty();
         }
         try {
@@ -74,16 +80,27 @@ public final class LlamaCppNarrator implements Narrator {
             HttpResponse<String> response =
                     http.send(httpRequest, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() != 200) {
+                log.info("narrator declined " + request.newsId() + ": status " + response.statusCode());
                 return Optional.empty();
             }
             String body = extractContent(response.body()).map(String::trim).filter(s -> !s.isEmpty())
                     .map(LlamaCppNarrator::dedupeSentences).filter(s -> !s.isEmpty())
                     .orElse(null);
-            if (body == null || denied(body) || isDegenerate(body)) {
+            if (body == null) {
+                log.info("narrator declined " + request.newsId() + ": empty");
+                return Optional.empty();
+            }
+            if (denied(body)) {
+                log.info("narrator declined " + request.newsId() + ": denylist");
+                return Optional.empty();
+            }
+            if (isDegenerate(body)) {
+                log.info("narrator declined " + request.newsId() + ": degenerate");
                 return Optional.empty();
             }
             return Optional.of(new Draft(body, model));
         } catch (Exception e) {
+            log.info("narrator declined " + request.newsId() + ": " + e);
             return Optional.empty();
         }
     }
@@ -105,7 +122,17 @@ public final class LlamaCppNarrator implements Narrator {
                         ? "Rules. Use ONLY these fictional company names. "
                         : "Rules. Name no companies at all; speak only of the broad market. ")
                 + "Never mention real companies, "
-                + "products, or news outlets. Never advise buying or selling. Plain prose, no headline. Story:";
+                + "products, or news outlets. Never advise buying or selling. "
+                // Facts lead, instructions stay declarative: trailing
+                // imperatives get parroted back into the prose (pilot: the
+                // model quoted "continue this developing story" verbatim,
+                // and read "Canon facts" as a company named Canon).
+                + (request.storyMemory() == null || request.storyMemory().isBlank() ? ""
+                        : "The latest development is the headline above. Earlier in this story: "
+                        + request.storyMemory() + ". ")
+                + (request.bible() == null || request.bible().isBlank() ? ""
+                        : "Background facts: " + request.bible() + " ")
+                + "Plain prose, no headline. Story:";
     }
 
     /**

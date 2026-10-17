@@ -13,7 +13,8 @@ public interface Narrator {
 
     /** Everything the narrator may know: simulation facts only, never player input. */
     record Request(String newsId, String kind, String headline, String scope, List<String> tickers,
-            String sector, List<String> subjectNames, double magnitude, long tick) {
+            String sector, List<String> subjectNames, double magnitude, long tick,
+            String storyMemory, String bible) {
     }
 
     record Draft(String body, String model) {
