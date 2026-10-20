@@ -69,7 +69,14 @@ class RoundRecoveryServiceTest {
 
         new RoundRecoveryService(log, snapshots, writer).checkpoint(2L);
 
-        assertEquals(1, log.readFrom(1L).size(), "only the boundary row stays for numbering");
+        // Ticks below the snapshot are compacted, but the boundary row (for
+        // numbering) and the fill row (for fill history) stay by design.
+        List<SequencedEvent> remaining = log.readFrom(1L);
+        assertEquals(2, remaining.size());
+        assertTrue(remaining.stream().noneMatch(s -> s.event() instanceof GameEvent.Tick),
+                "consumed ticks are pruned");
+        assertTrue(remaining.stream().anyMatch(s -> s.event() instanceof GameEvent.TradePrinted),
+                "fills stay for the fill-history query");
         RoundRecoveryService.RecoveryResult result = new RoundRecoveryService(
                 log(), snapshots, new BatchedEventLogWriter(log(), 100)).recover();
         assertEquals(3, result.history().size(), "snapshot still carries the prefix");
@@ -99,14 +106,15 @@ class RoundRecoveryServiceTest {
         assertEquals(3L, result.recoveredTick(), "clock resumes at the recovered tick");
         assertEquals(RoundState.RUNNING, result.state());
 
-        // Continue after recovery and confirm the log stays contiguous (it need
-        // not restart at 1: checkpoints compact the consumed prefix).
+        // Continue after recovery and confirm the log stays ordered (it need
+        // not restart at 1, nor stay gapless: checkpoints compact the consumed
+        // prefix, pruning ticks while fills stay for history).
         BatchedEventLogWriter after = new BatchedEventLogWriter(log(), 100);
         after.append(new GameEvent.Tick(4L, 400L));
         after.flush();
         List<SequencedEvent> all = log().readFrom(1L);
         for (int i = 1; i < all.size(); i++) {
-            assertEquals(all.get(i - 1).seq() + 1L, all.get(i).seq());
+            assertTrue(all.get(i - 1).seq() < all.get(i).seq(), "log stays ordered");
         }
     }
 
