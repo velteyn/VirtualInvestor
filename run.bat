@@ -38,7 +38,7 @@ if not errorlevel 1 (
     echo ==^> edge already running
 ) else (
     echo ==^> edge
-    start "VI-edge" /min cmd /c "cd /d "%~dp0server" ^&^& mvn -pl edge spring-boot:run"
+    start "VI-edge" /min /D "%~dp0server" cmd /c mvn -pl edge spring-boot:run
 )
 
 tasklist /FI "WINDOWTITLE eq VI-web*" 2>nul | findstr /i "node.exe" >nul
@@ -46,7 +46,7 @@ if not errorlevel 1 (
     echo ==^> web already running
 ) else (
     echo ==^> web
-    start "VI-web" /min cmd /c "cd /d "%~dp0web" ^&^& npm run dev"
+    start "VI-web" /min /D "%~dp0web" cmd /c npm run dev
 )
 
 echo waiting for the edge ...
