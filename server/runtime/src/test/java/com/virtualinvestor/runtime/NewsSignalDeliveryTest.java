@@ -14,6 +14,7 @@ import com.virtualinvestor.core.domain.OrderSide;
 import com.virtualinvestor.core.domain.OrderType;
 import com.virtualinvestor.core.engine.InstrumentEngine;
 import com.virtualinvestor.core.event.GameEvent;
+import com.virtualinvestor.core.news.ReliabilityTier;
 import com.virtualinvestor.core.participant.BotParticipant;
 import com.virtualinvestor.core.participant.ParticipantType;
 import java.util.List;
@@ -29,13 +30,13 @@ class NewsSignalDeliveryTest {
     private static BotRunner hunter() {
         return new BotRunner(
                 new BotParticipant("rival-5", "VULTURE", ParticipantType.RIVAL_BOT, 1_000_000.0),
-                new NewsHunterStrategy(0.01, 40L), null, 0L, 0.01, 0L);
+                new NewsHunterStrategy(0.01, 40L, 0.0), null, 0L, 0.01, 0L);
     }
 
     private static BotRunner macroDesk() {
         return new BotRunner(
                 new BotParticipant("inst-2", "MERIDIAN CAPITAL", ParticipantType.INSTITUTION, 1_000_000.0),
-                new MacroReactionStrategy(0.01, 1_000L), null, 0L, 0.01, 0L);
+                new MacroReactionStrategy(0.01, 1_000L, 0.0), null, 0L, 0.01, 0L);
     }
 
     private static InstrumentEngine book() {
@@ -61,7 +62,7 @@ class NewsSignalDeliveryTest {
     }
 
     private static NewsSignal company(double magnitude) {
-        return new NewsSignal(magnitude, "ACME", "TECH", NewsScope.COMPANY, 10L, 1_000L);
+        return new NewsSignal(magnitude, "ACME", "TECH", NewsScope.COMPANY, ReliabilityTier.WIRE, 10L, 1_000L);
     }
 
     @Test
@@ -85,7 +86,7 @@ class NewsSignalDeliveryTest {
     void institutionWaitsForTheTape() {
         BotRunner runner = macroDesk();
         InstrumentEngine engine = book();
-        NewsSignal macro = new NewsSignal(0.03, "ACME", "TECH", NewsScope.MACRO, 10L, 1_000L);
+        NewsSignal macro = new NewsSignal(0.03, "ACME", "TECH", NewsScope.MACRO, ReliabilityTier.WIRE, 10L, 1_000L);
 
         for (long tick = 10L; tick < 10L + BotRunner.MACRO_NEWS_DELAY_TICKS; tick++) {
             assertTrue(act(runner, engine, tick, tick == 10L ? macro : null).isEmpty(),
@@ -99,7 +100,7 @@ class NewsSignalDeliveryTest {
     void consumedSignalsNeverHaunt() {
         BotRunner runner = hunter();
         InstrumentEngine engine = book();
-        NewsSignal brief = new NewsSignal(0.03, "ACME", "TECH", NewsScope.COMPANY, 10L, 2L);
+        NewsSignal brief = new NewsSignal(0.03, "ACME", "TECH", NewsScope.COMPANY, ReliabilityTier.WIRE, 10L, 2L);
         assertEquals(40L, printedQty(act(runner, engine, 10L, brief)));
         // One-shot and windowed: later ticks stay silent with or without news.
         assertTrue(act(runner, engine, 11L, null).isEmpty());
@@ -112,7 +113,7 @@ class NewsSignalDeliveryTest {
         InstrumentEngine engine = book();
         // Macro release with a 2-tick window: the desk's 4-tick delay outlasts
         // it, so slow money misses fast news exactly as designed.
-        NewsSignal flash = new NewsSignal(0.03, "ACME", "TECH", NewsScope.MACRO, 10L, 2L);
+        NewsSignal flash = new NewsSignal(0.03, "ACME", "TECH", NewsScope.MACRO, ReliabilityTier.WIRE, 10L, 2L);
         for (long tick = 10L; tick < 24L; tick++) {
             assertTrue(act(runner, engine, tick, tick == 10L ? flash : null).isEmpty(),
                     "expired before the delay elapsed: no take at tick " + tick);
@@ -121,10 +122,10 @@ class NewsSignalDeliveryTest {
 
     @Test
     void delaysDifferByArchetype() {
-        assertEquals(0, BotRunner.newsDelayFor(new NewsHunterStrategy(0.01, 40L)));
+        assertEquals(0, BotRunner.newsDelayFor(new NewsHunterStrategy(0.01, 40L, 0.0)));
         assertEquals(0, BotRunner.newsDelayFor(new MomentumStrategy(0.0005, 30L)));
         assertEquals(BotRunner.MACRO_NEWS_DELAY_TICKS,
-                BotRunner.newsDelayFor(new MacroReactionStrategy(0.01, 1_000L)));
+                BotRunner.newsDelayFor(new MacroReactionStrategy(0.01, 1_000L, 0.0)));
     }
 
     @Test
@@ -150,11 +151,14 @@ class NewsSignalDeliveryTest {
     @Test
     void macroReleaseReachesOnlyTheIndex() {
         GameEvent.NewsReleased macro = new GameEvent.NewsReleased("n1", "WIRE", NewsScope.MACRO,
-                null, null, "Rates shock", "body", 0.03, 10L, NewsStage.RUMOR, 5L);
+                null, null, "Rates shock", "body", 0.03, 10L, NewsStage.RUMOR, 5L,
+                ReliabilityTier.WIRE);
         GameEvent.NewsReleased company = new GameEvent.NewsReleased("n2", "WIRE", NewsScope.COMPANY,
-                "ACME", "TECH", "Beats", "body", 0.02, 10L, NewsStage.RUMOR, 5L);
+                "ACME", "TECH", "Beats", "body", 0.02, 10L, NewsStage.RUMOR, 5L,
+                ReliabilityTier.WIRE);
         GameEvent.NewsReleased sector = new GameEvent.NewsReleased("n3", "WIRE", NewsScope.SECTOR,
-                null, "TECH", "Chip boom", "body", 0.02, 10L, NewsStage.RUMOR, 5L);
+                null, "TECH", "Chip boom", "body", 0.02, 10L, NewsStage.RUMOR, 5L,
+                ReliabilityTier.WIRE);
         Map<String, String> sectors = Map.of("ACME", "TECH", "BETA", "TECH", "GAMMA", "BANKS");
 
         Map<String, com.virtualinvestor.core.bot.NewsSignal> routed =

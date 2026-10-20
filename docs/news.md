@@ -76,6 +76,17 @@ contexts (`BotContext.news`, null on quiet ticks):
 - Every bot reads a slightly different magnitude (±25%, seeded per headline and
   reader, replay-identical), so borderline headlines split the crowd instead of
   moving it in lockstep.
+- **Personality: dispersion.** Each headline reader scales what it perceives by
+  `(1 − 0.01 × dispersion)`: VULTURE `5`, MERIDIAN `10`. A noisy desk sits out
+  borderline headlines a precise one trades. Price-action archetypes (TIDE,
+  LEDGER, BLITZ) take no dispersion — they read the tape, not the wire.
+- **Personality: reliability tiers.** Every release carries a tier — `WIRE`
+  (60% of items, confirms 80%), `PATRON` (30%, confirms 60%), `SPY` (10%,
+  confirms 35%) — drawn from the round seed. VULTURE reads all tiers;
+  MERIDIAN reads `WIRE` only and waits out patron/spy rumors. Scenario finales
+  keep the scenario deck's own fate (tiers govern who acts and routine-item
+  confirms, not major-shock outcomes), so circuit-breaker halts stay rare but
+  present.
 
 Rumor versus resolution: bots trade the headline (the rumor piece). The
 resolution plays out through fundamentals and volatility only — hunters who

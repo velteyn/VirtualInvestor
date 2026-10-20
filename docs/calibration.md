@@ -207,21 +207,24 @@ standings: MARK 105680.77 (fees 6431) | LEDGER 100707.87 (fees 1662)
 
 Configuration: as above, plus per-symbol headline signals with per-archetype
 delays (VULTURE 0 ticks, MERIDIAN 4) and ±25% seeded magnitude noise. Measured
-from `MarketRealismTest`:
+from `MarketRealismTest` (seed 42). Re-baselined for the personality layer
+(dispersion VULTURE 5 / MERIDIAN 10, wire-only macro desk, tiered confirms —
+prior numbers predate it):
 
 ```
-trades=3897 rejectedNoLiquidity=0
-maxToxicity=0.528 on SOLR (gate floor 2.25, trips=0)
-empty-side fraction across all symbols: 0.257
-standings: MARK 106017.61 (fees 6465) | LEDGER 102637.02 (fees 1673)
-  | ATLAS BANK 101866.49 (fees 645) | VULTURE 100035.11 (fees 70)
-  | MERIDIAN CAPITAL 100000.00 (fees 0) | You 99107.60 (fees 3)
-  | BLITZ 92746.15 (fees 1728) | CROWN FUND 91911.84 (fees 2335)
-  | TIDE 87637.18 (fees 4480)
+trades=6299 rejectedNoLiquidity=0
+maxToxicity=1.249 on TELC (gate floor 2.25, trips=0)
+empty-side fraction across all symbols: 0.285
+standings: MARK 109866.16 (fees 13292) | ATLAS BANK 108070.05 (fees 4150)
+  | VULTURE 100096.63 (fees 70) | MERIDIAN CAPITAL 100000.00 (fees 0)
+  | You 99119.33 (fees 3) | LEDGER 97030.85 (fees 1624)
+  | BLITZ 92573.20 (fees 1754) | TIDE 88336.27 (fees 4485)
+  | CROWN FUND 51928.21 (fees 24307)
 ```
 
-- VULTURE trades for the first time in any baseline (fees 70 on company
-  earnings) — the headline hunter is no longer decorative.
+- VULTURE stays active and roughly flat (fees 70, equity +97): dispersion 5
+  costs it a few borderline headlines but the hunter still pounces on company
+  earnings and rumor flow.
 - MERIDIAN stays flat here, correctly: the 180-tick seed carries no macro
   headlines (randoms need longer sessions). On a 30-minute session with 3 macro
   releases it took macro size three times (lifetime realized −43 — slow

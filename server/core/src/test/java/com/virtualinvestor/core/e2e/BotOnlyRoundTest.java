@@ -96,7 +96,7 @@ class BotOnlyRoundTest {
                 new MomentumStrategy(0.0005, 30L),
                 new ValueStrategy(0.005, 30L),
                 new ScalperStrategy(0.0005, 20L),
-                new NewsHunterStrategy(0.01, 40L));
+                new NewsHunterStrategy(0.01, 40L, 0.0));
         // MARK (index 0) is a market maker: it quotes rather than takes, so it has no
         // taker strategy here and is excluded from the taker loop.
         BotStrategy[] runners = new BotStrategy[rivals.size()];

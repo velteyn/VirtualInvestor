@@ -32,7 +32,8 @@ class RoundBroadcasterTest {
         bridge.publish(List.of(
                 new GameEvent.TradePrinted("NVDO", 100.0, 10L, OrderSide.BUY, 5L),
                 new GameEvent.NewsReleased("n1", "THE_WIRE", NewsScope.MACRO, null, null,
-                        "Data beats", "body", 0.01, 300L, NewsStage.RUMOR, 5L),
+                        "Data beats", "body", 0.01, 300L, NewsStage.RUMOR, 5L,
+                        com.virtualinvestor.core.news.ReliabilityTier.WIRE),
                 new GameEvent.OrderReport("o1", "p1", "NVDO", OrderSide.BUY,
                         com.virtualinvestor.core.domain.OrderType.LIMIT, 10L, 100.0, 10L, 0L,
                         com.virtualinvestor.core.domain.OrderStatus.FILLED,
@@ -144,7 +145,8 @@ class RoundBroadcasterTest {
 
         one.publish(List.of(new GameEvent.TradePrinted("NVDO", 100.0, 10L, OrderSide.BUY, 5L)), 1L);
         two.publish(List.of(new GameEvent.NewsReleased("n9", "THE_WIRE", NewsScope.MACRO, null, null,
-                "Other game moves", "body", 0.01, 300L, NewsStage.RUMOR, 5L)), 1L);
+                "Other game moves", "body", 0.01, 300L, NewsStage.RUMOR, 5L,
+                com.virtualinvestor.core.news.ReliabilityTier.WIRE)), 1L);
 
         String aFrames = String.join("\n", a.sent());
         String bFrames = String.join("\n", b.sent());

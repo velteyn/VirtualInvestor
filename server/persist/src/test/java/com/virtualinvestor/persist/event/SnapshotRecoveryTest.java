@@ -62,7 +62,8 @@ class SnapshotRecoveryTest {
                 new GameEvent.TradePrinted("ACME", 100.0, 10L, com.virtualinvestor.core.domain.OrderSide.BUY, 2L),
                 new GameEvent.Tick(3L, 300L),
                 new GameEvent.NewsReleased("n1", "THE_WIRE", com.virtualinvestor.core.domain.NewsScope.MACRO, null, null,
-                        "Data beats", "body", 0.01, 100L, com.virtualinvestor.core.domain.NewsStage.RUMOR, 3L),
+                        "Data beats", "body", 0.01, 100L, com.virtualinvestor.core.domain.NewsStage.RUMOR, 3L,
+                        com.virtualinvestor.core.news.ReliabilityTier.WIRE),
                 new GameEvent.Tick(4L, 400L));
         writer.appendAll(all);
         writer.flush();

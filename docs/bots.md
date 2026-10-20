@@ -10,10 +10,10 @@ in `com.virtualinvestor.core.bot`.
 | Name | Role | Strategy class | Behaviour |
 |---|---|---|---|
 | **MARK** | Market maker | `MarketMakerStrategy` | Quotes two-sided prices around the fundamental; spread widens with volatility and the mid skews against inventory. |
-| **TIDE** | Momentum | `MomentumStrategy` | Buys when recent price action is up, sells when down, amplifying moves. |
-| **LEDGER** | Value | `ValueStrategy` | Buys below the fundamental by the entry edge, sells above it, pulling price back toward fair value. |
-| **BLITZ** | Scalper | `ScalperStrategy` | Fades short-term moves, selling a pop and buying a dip. |
-| **VULTURE** | News hunter | `NewsHunterStrategy` | Pounces on a headline in the direction of its magnitude. |
+| **TIDE** | Momentum | `MomentumStrategy` | Buys when recent price action is up, sells when down, amplifying moves. Price action only — no dispersion. |
+| **LEDGER** | Value | `ValueStrategy` | Buys below the fundamental by the entry edge, sells above it, pulling price back toward fair value. Price action only — no dispersion. |
+| **BLITZ** | Scalper | `ScalperStrategy` | Fades short-term moves, selling a pop and buying a dip. Price action only — no dispersion. |
+| **VULTURE** | News hunter | `NewsHunterStrategy` | Pounces on a headline in the direction of its magnitude. Dispersion 5, reads every reliability tier. |
 
 All five are ranked by mark-to-market equity and seeded with the player's starting capital
 (spec: fair ranking).
@@ -26,7 +26,7 @@ Institutions provide liquidity and react to news and macro conditions. They are
 | Name | Role | Strategy class | Behaviour |
 |---|---|---|---|
 | **ATLAS BANK** | Block execution | `VwapExecution` | Works a large parent order in deterministic slices to limit market impact. |
-| **MERIDIAN CAPITAL** | Macro reaction | `MacroReactionStrategy` | Trades macro-scope headlines with size, in the news direction. |
+| **MERIDIAN CAPITAL** | Macro reaction | `MacroReactionStrategy` | Trades macro-scope headlines with size, in the news direction. Dispersion 10, wire tier only. |
 | **CROWN FUND** | Index / basket flow | `VwapExecution` (as a basket) | Index-like flow worked over time. A dedicated index-rebalance strategy is future work. |
 
 Institutions can be beaten indirectly: front-running a large VWAP print or leaning against a

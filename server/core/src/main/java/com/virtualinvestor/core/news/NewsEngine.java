@@ -39,17 +39,21 @@ public final class NewsEngine {
                 apply(rumor, piece);
                 events.add(new GameEvent.NewsReleased(
                         rumor.id(), rumor.source().name(), rumor.scope(), rumor.symbol(), rumor.sector(),
-                        rumor.headline(), rumor.body(), piece, rumor.durationTicks(), NewsStage.RUMOR, tick));
+                        rumor.headline(), rumor.body(), piece, rumor.durationTicks(), NewsStage.RUMOR, tick,
+                        rumor.tier()));
             }
             if (planned.resolutionTick() == tick) {
                 if (planned.confirmed()) {
                     double remaining = rumor.signedMagnitude() * (1.0 - planned.rumorFraction());
                     apply(rumor, remaining);
-                    events.add(new GameEvent.NewsConfirmed(rumor.id(), tick));
+                    // The wire carries the stage's lede, never the rumor text twice.
+                    String lede = rumor.confirmHeadline() != null ? rumor.confirmHeadline() : rumor.headline();
+                    events.add(new GameEvent.NewsConfirmed(rumor.id(), lede, tick));
                 } else {
                     double reverse = -rumor.signedMagnitude() * planned.rumorFraction();
                     apply(rumor, reverse);
-                    events.add(new GameEvent.NewsDenied(rumor.id(), tick));
+                    String lede = rumor.denyHeadline() != null ? rumor.denyHeadline() : rumor.headline();
+                    events.add(new GameEvent.NewsDenied(rumor.id(), lede, tick));
                 }
             }
         }

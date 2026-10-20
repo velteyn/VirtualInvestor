@@ -12,6 +12,7 @@ import java.util.Objects;
 public record NewsItem(
         String id,
         NewsSource source,
+        ReliabilityTier tier,
         NewsScope scope,
         String symbol,
         String sector,
@@ -24,11 +25,14 @@ public record NewsItem(
         long tick,
         double rumorFraction,
         long resolutionDelayTicks,
-        boolean confirmed) {
+        boolean confirmed,
+        String confirmHeadline,
+        String denyHeadline) {
 
     public NewsItem {
         requireText(id, "id");
         Objects.requireNonNull(source, "source");
+        Objects.requireNonNull(tier, "tier");
         Objects.requireNonNull(scope, "scope");
         Objects.requireNonNull(stage, "stage");
         requireText(headline, "headline");

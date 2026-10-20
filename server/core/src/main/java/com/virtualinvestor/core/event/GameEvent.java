@@ -80,13 +80,14 @@ public sealed interface GameEvent {
             double magnitude,
             long durationTicks,
             NewsStage stage,
-            long tick) implements GameEvent {
+            long tick,
+            com.virtualinvestor.core.news.ReliabilityTier tier) implements GameEvent {
     }
 
-    record NewsConfirmed(String newsId, long tick) implements GameEvent {
+    record NewsConfirmed(String newsId, String headline, long tick) implements GameEvent {
     }
 
-    record NewsDenied(String newsId, long tick) implements GameEvent {
+    record NewsDenied(String newsId, String headline, long tick) implements GameEvent {
     }
 
     record MarketFactorMoved(double previous, double current, long tick) implements GameEvent {

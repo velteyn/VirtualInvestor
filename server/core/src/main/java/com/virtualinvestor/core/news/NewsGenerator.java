@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Builds a round's news timeline: one scheduled earnings event per equity, plus random events
@@ -59,6 +60,12 @@ public final class NewsGenerator {
         }
         List<NewsItem> items = new ArrayList<>();
         DeterministicRandom random = streams.stream("news.random");
+        // Tiers roll off their own stream (news.tiers), so adding reliability
+        // never shifts the event stream: same seed, same events at same ticks.
+        DeterministicRandom tiers = streams.stream("news.tiers");
+        // Pack draws (news.packs) are content selection like entries: a
+        // separate stream so lede wording never shifts event timing.
+        DeterministicRandom packs = streams.stream("news.packs");
 
         List<Instrument> equities = universe.equities();
         for (int i = 0; i < equities.size(); i++) {
@@ -68,14 +75,19 @@ public final class NewsGenerator {
             boolean beat = random.nextDouble() < 0.5;
             double direction = beat ? 1.0 : -1.0;
             double magnitude = 0.01 + random.nextDouble() * 0.03;
+            // Earnings keep their single headline; the body comes from the
+            // analyst pack in the beat's direction (no resolution ledes).
+            StoryTemplates.Triple pack = StoryTemplates.drawFor(
+                    NewsScope.COMPANY, direction, packs);
             items.add(new NewsItem(
                     "sched-" + instrument.ticker(),
                     NewsSource.THE_WIRE,
+                    ReliabilityTier.roll(tiers.nextDouble()),
                     NewsScope.COMPANY,
                     instrument.ticker(),
                     instrument.sector(),
                     instrument.name() + (beat ? " beats quarterly expectations" : " misses quarterly expectations"),
-                    "Scheduled earnings release for " + instrument.name(),
+                    StoryTemplates.render(pack.body(), instrument.name(), instrument.sector()),
                     direction,
                     magnitude,
                     validityTicks(sessionTicks, NewsScope.COMPANY, magnitude),
@@ -83,7 +95,9 @@ public final class NewsGenerator {
                     tick,
                     0.5,
                     sessionTicks / 10L,
-                    false));
+                    false,
+                    null,
+                    null));
         }
 
         int randomCount = (int) (sessionTicks / ticksPerRandomEvent);
@@ -97,27 +111,30 @@ public final class NewsGenerator {
             NewsScope scope;
             String symbol = null;
             String sector = null;
-            String headline;
             if (scopeRoll < 55) {
                 scope = NewsScope.COMPANY;
                 symbol = instrument.ticker();
-                headline = instrument.name() + (direction > 0 ? " jumps on upgrade" : " slides on downgrade");
             } else if (scopeRoll < 80) {
                 scope = NewsScope.SECTOR;
                 sector = instrument.sector();
-                headline = instrument.sector() + " names " + (direction > 0 ? "strengthen" : "weaken on flows");
             } else {
                 scope = NewsScope.MACRO;
-                headline = direction > 0 ? "Data beats expectations, stocks climb" : "Data misses, stocks slide";
             }
+            // Staged from the pack: rumor, confirm and deny ledes plus the
+            // body all come from one entry in the rumor's direction, so the
+            // resolution never repeats the rumor text.
+            StoryTemplates.Triple pack = StoryTemplates.drawFor(scope, direction, packs);
+            String slotName = instrument.name();
+            String slotSector = scope == NewsScope.SECTOR ? sector : instrument.sector();
             items.add(new NewsItem(
                     "rand-" + i,
                     NewsSource.TAPE,
+                    ReliabilityTier.roll(tiers.nextDouble()),
                     scope,
                     symbol,
                     sector,
-                    headline,
-                    "Wire report",
+                    StoryTemplates.render(pack.rumor(), slotName, slotSector),
+                    StoryTemplates.render(pack.body(), slotName, slotSector),
                     direction,
                     magnitude,
                     validityTicks(sessionTicks, scope, magnitude),
@@ -125,20 +142,53 @@ public final class NewsGenerator {
                     tick,
                     0.5,
                     sessionTicks / 10L,
-                    false));
+                    false,
+                    StoryTemplates.render(pack.confirm(), slotName, slotSector),
+                    StoryTemplates.render(pack.deny(), slotName, slotSector)));
         }
 
-        List<NewsItem> scenarios = planScenarios(random, equities, startTick, sessionTicks);
+        List<NewsItem> scenarios = planScenarios(random, tiers, packs, equities, startTick, sessionTicks);
         java.util.Set<String> scenarioIds = new java.util.HashSet<>();
         for (NewsItem scenario : scenarios) {
             scenarioIds.add(scenario.id());
             items.add(scenario);
         }
 
+        // Room banter: zero-magnitude macro items at fixed session fractions,
+        // day-gated so mid-game banter unlocks as the session ages. Flavor
+        // only — no fundamental impact, ignored by every strategy.
+        for (int t = 0; t < TAUNT_FRACTIONS.length; t++) {
+            double fraction = TAUNT_FRACTIONS[t];
+            Optional<String> taunt = StoryTemplates.tauntAt(fraction, packs);
+            if (taunt.isEmpty()) {
+                continue;
+            }
+            items.add(new NewsItem(
+                    "taunt-" + t,
+                    NewsSource.TAPE,
+                    ReliabilityTier.roll(tiers.nextDouble()),
+                    NewsScope.MACRO,
+                    null,
+                    null,
+                    taunt.get(),
+                    "",
+                    0.0,
+                    0.0,
+                    validityTicks(sessionTicks, NewsScope.MACRO, 0.0),
+                    NewsStage.RUMOR,
+                    startTick + (long) (sessionTicks * fraction),
+                    0.5,
+                    sessionTicks / 10L,
+                    false,
+                    null,
+                    null));
+        }
+
         items.sort(Comparator.comparingLong(NewsItem::tick).thenComparing(NewsItem::id));
-        // Legacy uniform staging for everything the deck did not stage: 50/50
-        // split, session/10 delay, alternating confirm by timeline position —
-        // exactly what the runtime mapping produced before the deck existed.
+        // Legacy tiered staging for everything the deck did not stage: the
+        // rumor keeps its wire shape (fraction 1/2, session/10 delay) while
+        // confirmation is a tier-biased draw off the news stream — wire ledes
+        // confirm most often, spy ledes deny most often.
         List<NewsItem> staged = new ArrayList<>(items.size());
         for (int index = 0; index < items.size(); index++) {
             NewsItem item = items.get(index);
@@ -147,10 +197,11 @@ public final class NewsGenerator {
                 continue;
             }
             staged.add(new NewsItem(
-                    item.id(), item.source(), item.scope(), item.symbol(), item.sector(),
+                    item.id(), item.source(), item.tier(), item.scope(), item.symbol(), item.sector(),
                     item.headline(), item.body(), item.direction(), item.magnitude(),
                     item.durationTicks(), item.stage(), item.tick(),
-                    0.5, sessionTicks / 10L, index % 2 == 0));
+                    0.5, sessionTicks / 10L, random.nextDouble() < item.tier().confirmBias(),
+                    item.confirmHeadline(), item.denyHeadline()));
         }
         return List.copyOf(staged);
     }
@@ -162,7 +213,8 @@ public final class NewsGenerator {
      * other item with the legacy uniform mapping.
      */
     static List<NewsItem> planScenarios(
-            DeterministicRandom random, List<Instrument> equities, long startTick, long sessionTicks) {
+            DeterministicRandom random, DeterministicRandom tiers, DeterministicRandom packs,
+            List<Instrument> equities, long startTick, long sessionTicks) {
         int count = 1 + (int) Math.floor(random.nextDouble() * 3.0);
         List<NewsItem> scenarios = new ArrayList<>();
         for (int i = 0; i < count; i++) {
@@ -174,6 +226,8 @@ public final class NewsGenerator {
                     ? (random.nextDouble() < 0.5 ? 1.0 : -1.0)
                     : entry.fixedDirection();
             String storyId = "scen-" + entry.key() + "-" + i;
+            // One story, one source, one reliability tier for all its beats.
+            ReliabilityTier tier = ReliabilityTier.roll(tiers.nextDouble());
             // Beats chain forward: each rumor lands just after the previous
             // beat's resolution, so the fundamental path stays continuous.
             long tick = startTick + (long) (sessionTicks * Math.min(scenarioBase(i, random), 0.94));
@@ -188,14 +242,23 @@ public final class NewsGenerator {
                         + random.nextDouble() * (beat.maxDelayFraction() - beat.minDelayFraction())));
                 long resolutionTick = Math.min(tick + delay, startTick + (long) (sessionTicks * 0.98));
                 // Middle beats always continue the arc; only the finale draws
-                // its fate, so a deny lands once, at the end, like today.
+                // its fate from the deck's own bias, decoupled from the tier
+                // multiplier: a major shock's fate is a market-structure fact,
+                // not a function of who carried the rumor. Tiers still govern
+                // trust reads and routine-item confirms, so halt-inducing ends
+                // stay rare but present and the breaker keeps getting tested.
                 boolean confirmed = b < beats.size() - 1 || random.nextDouble() < beat.confirmBias();
                 String name = instrument.name();
                 String headline = beat.headline().replace("{name}", name).replace("{sector}", instrument.sector());
                 String sector = entry.scope() == NewsScope.SECTOR ? instrument.sector() : null;
+                // The deck authors the rumor beat (arc continuity + bible);
+                // the resolution ledes come from the matching pack so the
+                // wire never repeats the rumor text at confirm/deny time.
+                StoryTemplates.Triple pack = StoryTemplates.drawScenario(entry.key(), direction, packs);
                 scenarios.add(new NewsItem(
                         StoryIds.beatId(storyId, b),
                         entry.source(),
+                        tier,
                         entry.scope(),
                         entry.scope() == NewsScope.COMPANY ? instrument.ticker() : null,
                         sector,
@@ -208,7 +271,9 @@ public final class NewsGenerator {
                         tick,
                         beat.rumorFraction(),
                         Math.max(1L, resolutionTick - tick),
-                        confirmed));
+                        confirmed,
+                        StoryTemplates.render(pack.confirm(), name, instrument.sector()),
+                        StoryTemplates.render(pack.deny(), name, instrument.sector())));
                 tick = resolutionTick + (long) (sessionTicks * 0.01);
             }
         }
@@ -216,6 +281,7 @@ public final class NewsGenerator {
     }
 
     /** Arc start slots: ≥12% in, ≥18% apart, under 94% of the session. */
+    private static final double[] TAUNT_FRACTIONS = {0.30, 0.55, 0.80};
     private static double scenarioBase(int index, DeterministicRandom random) {
         return 0.12 + 0.24 * index + random.nextDouble() * 0.06;
     }

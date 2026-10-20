@@ -13,6 +13,9 @@ import org.junit.jupiter.api.Test;
 /**
  * Market-scenarios soak: short fast rounds must release scenario rumors and,
  * on violent company shocks, trip a REALISTIC circuit breaker end to end.
+ * Seeds span 1-12: tiered trust (wire-only macro desk) thins institutional
+ * takes on some seeds, so the window is wider than the pre-tier six — halts
+ * stay rare but present, never gone.
  */
 class ScenarioSoakTest {
 
@@ -22,7 +25,7 @@ class ScenarioSoakTest {
     void scenariosReleaseAndHaltTheMarket() {
         Set<String> rumorIds = new HashSet<>();
         boolean haltTripped = false;
-        for (long seed = 1L; seed <= 6L; seed++) {
+        for (long seed = 1L; seed <= 12L; seed++) {
             RunningRound round = new RunningRound("round-scen-" + seed, seed,
                     new LaunchConfig(100_000.0, 15L, RealismPreset.REALISTIC), STEP_MILLIS);
             round.start();

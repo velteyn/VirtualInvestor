@@ -1,5 +1,6 @@
 package com.virtualinvestor.core.news;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.virtualinvestor.core.domain.NewsScope;
@@ -26,8 +27,8 @@ class NewsEngineTest {
     }
 
     private static NewsItem rumor(double direction, double magnitude) {
-        return new NewsItem("n1", NewsSource.THE_WIRE, NewsScope.COMPANY, "HIGH1", "Semis",
-                "Rumour of a deal", "Wire report", direction, magnitude, 100L, NewsStage.RUMOR, 10L, 0.5, 100L, true);
+        return new NewsItem("n1", NewsSource.THE_WIRE, ReliabilityTier.WIRE, NewsScope.COMPANY, "HIGH1", "Semis",
+                "Rumour of a deal", "Wire report", direction, magnitude, 100L, NewsStage.RUMOR, 10L, 0.5, 100L, true, null, null);
     }
 
     @Test
@@ -61,5 +62,45 @@ class NewsEngineTest {
         double afterDenial = model.fundamental("HIGH1");
         assertTrue(afterDenial < afterRumor, "denial should reverse the rumor move");
         assertTrue(resolutionEvents.stream().anyMatch(GameEvent.NewsDenied.class::isInstance));
+    }
+
+    @Test
+    void resolutionCarriesTheStageLede() {
+        FundamentalModel model = model();
+        NewsItem staged = new NewsItem("n1", NewsSource.THE_WIRE, ReliabilityTier.WIRE,
+                NewsScope.COMPANY, "HIGH1", "Semis",
+                "Rumour of a deal", "Wire report", 1.0, 0.10, 100L, NewsStage.RUMOR, 10L, 0.5, 100L, true,
+                "Deal approved", "Deal collapses");
+        NewsEngine confirmed = new NewsEngine(model, List.of(new PlannedNews(staged, 40L, true, 0.4)));
+        List<GameEvent> confirmEvents = confirmed.advance(40L);
+        GameEvent.NewsConfirmed resolution = confirmEvents.stream()
+                .filter(GameEvent.NewsConfirmed.class::isInstance)
+                .map(GameEvent.NewsConfirmed.class::cast)
+                .findFirst()
+                .orElseThrow();
+        assertEquals("Deal approved", resolution.headline());
+        assertTrue(!resolution.headline().equals(staged.headline()));
+
+        NewsEngine denied = new NewsEngine(model, List.of(new PlannedNews(staged, 40L, false, 0.4)));
+        List<GameEvent> denyEvents = denied.advance(40L);
+        GameEvent.NewsDenied reversal = denyEvents.stream()
+                .filter(GameEvent.NewsDenied.class::isInstance)
+                .map(GameEvent.NewsDenied.class::cast)
+                .findFirst()
+                .orElseThrow();
+        assertEquals("Deal collapses", reversal.headline());
+    }
+
+    @Test
+    void resolutionWithoutTripleRepeatsTheRumor() {
+        FundamentalModel model = model();
+        NewsEngine engine = new NewsEngine(model, List.of(new PlannedNews(rumor(1.0, 0.10), 40L, true, 0.4)));
+        List<GameEvent> resolutionEvents = engine.advance(40L);
+        GameEvent.NewsConfirmed resolution = resolutionEvents.stream()
+                .filter(GameEvent.NewsConfirmed.class::isInstance)
+                .map(GameEvent.NewsConfirmed.class::cast)
+                .findFirst()
+                .orElseThrow();
+        assertEquals("Rumour of a deal", resolution.headline());
     }
 }

@@ -352,7 +352,7 @@ public final class RunningRound {
                 continue;
             }
             NewsSignal signal = new NewsSignal(release.magnitude(), release.symbol(),
-                    release.sector(), release.scope(), release.tick(), release.durationTicks());
+                    release.sector(), release.scope(), release.tier(), release.tick(), release.durationTicks());
             switch (release.scope()) {
                 case COMPANY -> {
                     if (release.symbol() != null) {
@@ -396,7 +396,7 @@ public final class RunningRound {
                         new com.virtualinvestor.core.bot.ScalperStrategy(0.0005, 20L), null, 0L,
                         0.01, 0L, sessionTicks, seed);
                 case "VULTURE" -> new BotRunner(rival,
-                        new com.virtualinvestor.core.bot.NewsHunterStrategy(0.01, 40L), null, 0L,
+                        new com.virtualinvestor.core.bot.NewsHunterStrategy(0.01, 40L, 5.0), null, 0L,
                         0.01, 0L, sessionTicks, seed);
                 default -> throw new IllegalArgumentException("unknown rival: " + rival.displayName());
             });
@@ -405,7 +405,7 @@ public final class RunningRound {
         built.add(new BotRunner(institutions.get(0), null, makerFor(rivals.size()), QUOTE_REFRESH_TICKS,
                 tickFor("NVDO"), rivals.size(), sessionTicks, seed));
         built.add(new BotRunner(institutions.get(1),
-                new com.virtualinvestor.core.bot.MacroReactionStrategy(0.01, 1_000L), null, 0L,
+                new com.virtualinvestor.core.bot.MacroReactionStrategy(0.01, 1_000L, 10.0), null, 0L,
                 0.01, 0L, sessionTicks, seed));
         built.add(new BotRunner(institutions.get(2), null, makerFor(rivals.size() + 2),
                 QUOTE_REFRESH_TICKS, tickFor("NVDO"), rivals.size() + 2, sessionTicks, seed));

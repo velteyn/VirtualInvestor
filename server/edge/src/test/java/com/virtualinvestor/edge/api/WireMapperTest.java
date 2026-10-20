@@ -59,7 +59,8 @@ class WireMapperTest {
     @Test
     void newsEventMapsToNewsDto() {
         GameEvent news = new GameEvent.NewsReleased("n1", "THE_WIRE", NewsScope.MACRO, null, null,
-                "Data beats", "body", 0.01, 300L, NewsStage.RUMOR, 5L);
+                "Data beats", "body", 0.01, 300L, NewsStage.RUMOR, 5L,
+                com.virtualinvestor.core.news.ReliabilityTier.WIRE);
         WireMessage.NewsDto dto = assertInstanceOf(WireMessage.NewsDto.class, WireMapper.event(news));
         assertEquals("THE_WIRE", dto.source());
         assertEquals("RUMOR", dto.stage());

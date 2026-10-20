@@ -8,6 +8,7 @@ import com.virtualinvestor.core.book.IncomingOrder;
 import com.virtualinvestor.core.book.RestingOrder;
 import com.virtualinvestor.core.domain.NewsScope;
 import com.virtualinvestor.core.domain.OrderSide;
+import com.virtualinvestor.core.news.ReliabilityTier;
 import com.virtualinvestor.core.domain.OrderType;
 import com.virtualinvestor.core.engine.InstrumentEngine;
 import com.virtualinvestor.core.participant.BotParticipant;
@@ -53,12 +54,35 @@ class InstitutionStrategyTest {
 
     @Test
     void macroStrategyOnlyActsOnMacroNews() {
-        MacroReactionStrategy institution = new MacroReactionStrategy(0.01, 1000L);
-        BotContext macro = context(new NewsSignal(0.05, null, null, NewsScope.MACRO, 1L, Long.MAX_VALUE));
-        BotContext company = context(new NewsSignal(0.05, "ACME", "Tech", NewsScope.COMPANY, 1L, Long.MAX_VALUE));
+        MacroReactionStrategy institution = new MacroReactionStrategy(0.01, 1000L, 0.0);
+        BotContext macro = context(new NewsSignal(0.05, null, null, NewsScope.MACRO, ReliabilityTier.WIRE, 1L, Long.MAX_VALUE));
+        BotContext company = context(new NewsSignal(0.05, "ACME", "Tech", NewsScope.COMPANY, ReliabilityTier.WIRE, 1L, Long.MAX_VALUE));
 
         assertEquals(OrderSide.BUY, institution.decide(macro).get(0).side());
         assertTrue(institution.decide(company).isEmpty());
+    }
+
+    @Test
+    void macroDeskOnlyTrustsTheWire() {
+        MacroReactionStrategy institution = new MacroReactionStrategy(0.01, 1000L, 0.0);
+        for (ReliabilityTier tier : ReliabilityTier.values()) {
+            NewsSignal signal = new NewsSignal(0.05, null, null, NewsScope.MACRO, tier, 1L, Long.MAX_VALUE);
+            if (tier == ReliabilityTier.WIRE) {
+                assertEquals(1, institution.decide(context(signal)).size());
+            } else {
+                assertTrue(institution.decide(context(signal)).isEmpty(), "desk ignores " + tier);
+            }
+        }
+    }
+
+    @Test
+    void macroDispersionDullsBorderlineShocks() {
+        NewsSignal borderline = new NewsSignal(0.012, null, null, NewsScope.MACRO, ReliabilityTier.WIRE, 1L, Long.MAX_VALUE);
+        MacroReactionStrategy precise = new MacroReactionStrategy(0.01, 1000L, 0.0);
+        MacroReactionStrategy dull = new MacroReactionStrategy(0.01, 1000L, 30.0);
+
+        assertEquals(1, precise.decide(context(borderline)).size());
+        assertTrue(dull.decide(context(borderline)).isEmpty());
     }
 
     @Test

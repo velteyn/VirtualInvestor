@@ -11,6 +11,7 @@ import com.virtualinvestor.core.domain.OrderStatus;
 import com.virtualinvestor.core.domain.OrderType;
 import com.virtualinvestor.core.domain.SessionPhase;
 import com.virtualinvestor.core.event.GameEvent;
+import com.virtualinvestor.core.news.ReliabilityTier;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -53,9 +54,10 @@ class CommandEventCodecTest {
             new GameEvent.RoundResumed("round-1", 1001L),
             new GameEvent.RoundSettled("round-1", 18_001L),
             new GameEvent.NewsReleased("news-1", "THE WIRE", NewsScope.COMPANY, "ACME", "tech",
-                    "ACME beats guidance", "Body text", 0.05, 300L, NewsStage.RUMOR, 55L),
-            new GameEvent.NewsConfirmed("news-1", 80L),
-            new GameEvent.NewsDenied("news-1", 80L),
+                    "ACME beats guidance", "Body text", 0.05, 300L, NewsStage.RUMOR, 55L,
+                    ReliabilityTier.WIRE),
+            new GameEvent.NewsConfirmed("news-1", "ACME confirms", 80L),
+            new GameEvent.NewsDenied("news-1", "ACME denies", 80L),
             new GameEvent.MarketFactorMoved(0.01, -0.02, 60L),
             new GameEvent.FundamentalJumped("ACME", 100.0, 105.0, 61L),
             new GameEvent.VolatilityStateChanged("ACME", 0.2, 0.35, 62L),
@@ -78,7 +80,8 @@ class CommandEventCodecTest {
     void stringsWithSeparatorsRoundTrip() {
         GameEvent.NewsReleased sample = new GameEvent.NewsReleased(
                 "news-2", "THE WIRE", NewsScope.MACRO, "", "",
-                "line one\tline\ntwo\\end", "body with \r carriage", -0.03, 0L, NewsStage.CONFIRMED, 5L);
+                "line one\tline\ntwo\\end", "body with \r carriage", -0.03, 0L, NewsStage.CONFIRMED, 5L,
+                ReliabilityTier.PATRON);
         String encoded = RecordTextCodec.encode(sample);
         GameEvent.NewsReleased decoded = RecordTextCodec.decode(encoded, GameEvent.NewsReleased.class);
         assertEquals(sample, decoded);

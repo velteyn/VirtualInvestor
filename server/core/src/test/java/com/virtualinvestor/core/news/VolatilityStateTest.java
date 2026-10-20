@@ -48,8 +48,8 @@ class VolatilityStateTest {
         VolatilityState state = new VolatilityState(0.99);
         FundamentalModel model = model(state);
         NewsEngine engine = new NewsEngine(model, List.of(new PlannedNews(
-                new NewsItem("n1", NewsSource.THE_WIRE, NewsScope.COMPANY, "HIGH1", "Semis",
-                        "Rumour", "body", 1.0, 0.5, 100L, NewsStage.RUMOR, 10L, 0.5, 100L, true),
+                new NewsItem("n1", NewsSource.THE_WIRE, ReliabilityTier.WIRE, NewsScope.COMPANY, "HIGH1", "Semis",
+                        "Rumour", "body", 1.0, 0.5, 100L, NewsStage.RUMOR, 10L, 0.5, 100L, true, null, null),
                 40L, true, 1.0)));
         engine.setVolatilityState(state);
 

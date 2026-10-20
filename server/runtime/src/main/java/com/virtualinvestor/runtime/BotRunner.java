@@ -291,7 +291,7 @@ final class BotRunner {
                 Double.hashCode(signal.signedMagnitude()), signal.releaseTick(), participantId);
         double epsilon = (new java.util.Random(hash).nextDouble() * 2.0 - 1.0) * NEWS_NOISE_FRACTION;
         return new NewsSignal(signal.signedMagnitude() * (1.0 + epsilon),
-                signal.symbol(), signal.sector(), signal.scope(),
+                signal.symbol(), signal.sector(), signal.scope(), signal.tier(),
                 signal.releaseTick(), signal.validityTicks());
     }
 

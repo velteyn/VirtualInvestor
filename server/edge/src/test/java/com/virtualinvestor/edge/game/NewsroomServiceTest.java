@@ -14,7 +14,8 @@ class NewsroomServiceTest {
     private static GameEvent.NewsReleased release(String newsId, NewsScope scope) {
         return new GameEvent.NewsReleased(newsId, "THE_WIRE", scope, "PEAR", "Consumer Tech",
                 "headline", "", 0.02, 100L,
-                com.virtualinvestor.core.domain.NewsStage.CONFIRMED, 5400L);
+                com.virtualinvestor.core.domain.NewsStage.CONFIRMED, 5400L,
+                com.virtualinvestor.core.news.ReliabilityTier.WIRE);
     }
 
     @Test
@@ -33,8 +34,18 @@ class NewsroomServiceTest {
     void scenarioBeatsAreEligible() {
         GameEvent.NewsReleased beat = new GameEvent.NewsReleased("scen-takeover-0-b1", "THE_WIRE",
                 NewsScope.COMPANY, "NVDO", "Tech", "headline", "", 0.15, 1000L,
-                com.virtualinvestor.core.domain.NewsStage.RUMOR, 3000L);
+                com.virtualinvestor.core.domain.NewsStage.RUMOR, 3000L,
+                com.virtualinvestor.core.news.ReliabilityTier.WIRE);
         assertEquals(ArticleStore.Kind.SCENARIO, NewsroomService.kindOf(beat));
+    }
+
+    @Test
+    void tauntsNeverReachTheNewsroom() {
+        GameEvent.NewsReleased banter = new GameEvent.NewsReleased("taunt-0", "TAPE",
+                NewsScope.MACRO, null, null, "Half the room is green.", "", 0.0, 5L,
+                com.virtualinvestor.core.domain.NewsStage.RUMOR, 100L,
+                com.virtualinvestor.core.news.ReliabilityTier.WIRE);
+        assertNull(NewsroomService.kindOf(banter));
     }
 
     @Test

@@ -352,6 +352,11 @@ public class NewsroomService {
 
     /** Earnings, sector, macro and structural news are eligible; random company noise is skipped. */
     static ArticleStore.Kind kindOf(GameEvent.NewsReleased news) {
+        // Banter is wire flavor, never article material: narrating it would
+        // burn sidecar budget on zero-magnitude noise.
+        if (news.newsId() != null && news.newsId().startsWith("taunt-")) {
+            return null;
+        }
         if (news.newsId() != null && news.newsId().startsWith("scen-")) {
             return ArticleStore.Kind.SCENARIO;
         }
