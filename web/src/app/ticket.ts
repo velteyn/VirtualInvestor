@@ -6,6 +6,7 @@
  */
 import type { OrderCommand, RoundResponse, ServerClient, SymbolResponse, WirePayload } from '../adapters/serverClient';
 import type { VirtualInvestorTradeFeed } from '../adapters/tradeFeed';
+import { socketErrorLabel } from './errors';
 import companies from '../assets/companies.json';
 
 export interface Ticket {
@@ -826,10 +827,10 @@ export function mountTicket(
   const ownOrders = new Set<string>();
   const unsubOrders = client.onPayload((payload: WirePayload) => {
     // Server errors (not-approved, not_joined, rejected commands) are addressed
-    // to whoever sent them — always surface, since no one else will.
+    // to whoever sent them — always surface, since no one else will. Codes
+    // map to labels; only unknown shapes fall back to the raw message.
     if (payload.type === 'error') {
-      const message = String(payload.message ?? payload.code ?? 'error');
-      error.textContent = message;
+      error.textContent = socketErrorLabel(payload);
       return;
     }
     if (payload.type !== 'order' || typeof payload.orderId !== 'string' || !ownOrders.has(payload.orderId)) {

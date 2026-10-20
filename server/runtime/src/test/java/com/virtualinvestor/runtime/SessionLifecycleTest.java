@@ -80,6 +80,52 @@ class SessionLifecycleTest {
     }
 
     @Test
+    void uncrossedAuctionOrderIsCancelledWithReason() {
+        RunningRound round = round(15L);
+        round.start();
+        for (int i = 0; i < 3; i++) {
+            round.step();
+        }
+        assertEquals(SessionPhase.OPENING_AUCTION, round.session().phase());
+
+        // A lone-sided auction order can never cross: the clear must report
+        // it cancelled instead of stranding it as working on the client.
+        round.enqueue(new Command.PlaceOrder("cmd-auc-1", "human", "NVDO", OrderSide.BUY, OrderType.LIMIT, 10L, 900.0, 0.0, 0L));
+        List<GameEvent> across = round.step();
+        assertEquals(SessionPhase.CONTINUOUS, round.session().phase());
+
+        assertTrue(across.stream().anyMatch(e -> e instanceof GameEvent.OrderReport r
+                && r.orderId().equals("cmd-auc-1")
+                && r.event() == com.virtualinvestor.core.domain.OrderEventKind.CANCELLED
+                && r.reason() != null && r.reason().contains("no match")),
+                "an uncrossed auction order must be cancelled with a reason");
+    }
+
+    @Test
+    void crossedAuctionOrdersReportFills() {
+        RunningRound round = round(16L);
+        round.start();
+        for (int i = 0; i < 3; i++) {
+            round.step();
+        }
+        assertEquals(SessionPhase.OPENING_AUCTION, round.session().phase());
+
+        round.enqueue(new Command.PlaceOrder("cmd-auc-2", "human", "NVDO", OrderSide.BUY, OrderType.LIMIT, 10L, 900.0, 0.0, 0L));
+        round.enqueue(new Command.PlaceOrder("cmd-auc-3", "rival-1", "NVDO", OrderSide.SELL, OrderType.LIMIT, 10L, 100.0, 0.0, 0L));
+        List<GameEvent> across = round.step();
+
+        assertTrue(across.stream().anyMatch(e -> e instanceof GameEvent.OrderReport r
+                && r.orderId().equals("cmd-auc-2")
+                && r.event() == com.virtualinvestor.core.domain.OrderEventKind.FILL
+                && r.status() == com.virtualinvestor.core.domain.OrderStatus.FILLED),
+                "a crossed auction buy must report its fill");
+        assertTrue(across.stream().anyMatch(e -> e instanceof GameEvent.OrderReport r
+                && r.orderId().equals("cmd-auc-3")
+                && r.event() == com.virtualinvestor.core.domain.OrderEventKind.FILL),
+                "a crossed auction sell must report its fill");
+    }
+
+    @Test
     void roundSettlesAtTheCloseAndRefusesFurtherOrders() {
         RunningRound round = round(14L);
         round.start();

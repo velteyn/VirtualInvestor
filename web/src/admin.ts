@@ -6,6 +6,7 @@
  */
 import './styles.css';
 import { API_VERSION } from './adapters/serverClient';
+import { friendlyError } from './app/errors';
 
 let adminToken: string | null = null;
 
@@ -58,13 +59,16 @@ async function refreshPlayers(table: HTMLElement): Promise<void> {
   body.innerHTML = players
     .map((p) => `<tr><td><b>${esc(p.username)}</b></td><td>${p.kind}</td><td>${p.status}</td>
       <td>${esc(p.bankId)}</td>
-      <td class="vi-actions">
+      <td class="vi-actions"><details class="vi-menu">
+      <summary>Actions</summary>
+      <div class="vi-menu-list">
       <button data-act="approve" data-id="${p.playerId}">Approve</button>
       <button data-act="reject" data-id="${p.playerId}">Reject</button>
       <button data-act="edit" data-id="${p.playerId}" data-name="${esc(p.username)}" data-bank="${esc(p.bankId)}">Edit</button>
       <button data-act="delete" data-id="${p.playerId}" data-name="${esc(p.username)}">Delete</button>
       <button data-act="reset-pw" data-id="${p.playerId}">Reset password</button>
-      <button data-act="reset-purse" data-id="${p.playerId}">Reset purse</button></td></tr>`)
+      <button data-act="reset-purse" data-id="${p.playerId}">Reset purse</button>
+      </div></details></td></tr>`)
     .join('');
 }
 
@@ -79,9 +83,11 @@ async function refreshRounds(list: HTMLElement): Promise<void> {
   const rounds = await call<RoundRow[]>('/api/admin/rounds', {});
   list.innerHTML = rounds
     .map((r) => `<li><b>${esc(r.roundId)}</b> ${r.state} @${r.tick}
+      <details class="vi-menu"><summary>Actions</summary><div class="vi-menu-list">
       <button data-act="pause" data-id="${r.roundId}">Pause</button>
       <button data-act="resume" data-id="${r.roundId}">Resume</button>
-      <button data-act="settle" data-id="${r.roundId}">Settle</button></li>`)
+      <button data-act="settle" data-id="${r.roundId}">Settle</button>
+      </div></details></li>`)
     .join('');
 }
 
@@ -119,7 +125,7 @@ function mount(): void {
   const roundsList = root.querySelector<HTMLUListElement>('#adm-rounds')!;
 
   const fail = (cause: unknown): void => {
-    error.textContent = cause instanceof Error ? cause.message : 'request failed';
+    error.textContent = friendlyError(cause);
   };
 
   go.addEventListener('click', async () => {
@@ -132,7 +138,7 @@ function mount(): void {
       await refreshBanks(root.querySelector<HTMLSelectElement>('#adm-new-bank')!);
       await refreshRounds(roundsList);
     } catch (cause) {
-      fail(cause);
+      error.textContent = friendlyError(cause, { 401: 'Wrong master password.' });
     }
   });
   root.querySelector('#adm-reload-players')!.addEventListener('click', () => {
@@ -163,6 +169,8 @@ function mount(): void {
     if (act === null || id === null) {
       return;
     }
+    // Collapse the dropdown once a choice is made (re-renders recreate it closed anyway).
+    target.closest('details.vi-menu')?.removeAttribute('open');
     try {
       if (act === 'approve' || act === 'reject') {
         await call(`/api/admin/players/${act}`, { playerId: id });

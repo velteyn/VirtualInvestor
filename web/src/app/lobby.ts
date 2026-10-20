@@ -9,6 +9,7 @@ import type {
   RoundResponse,
   ServerClient,
 } from '../adapters/serverClient';
+import { friendlyError } from './errors';
 
 const PRESETS: Array<RoundConfig['preset']> = ['ARCADE', 'REALISTIC', 'HARDCORE'];
 const CAPITALS = [25_000, 50_000, 100_000, 250_000, 1_000_000];
@@ -79,8 +80,8 @@ export function mountLobby(
   const body = root.querySelector<HTMLTableSectionElement>('#vi-games-body')!;  const dialog = root.querySelector<HTMLDivElement>('#vi-dialog')!;
   const waiting = root.querySelector<HTMLDivElement>('#vi-waiting')!;
   const error = root.querySelector<HTMLParagraphElement>('#vi-lobby-error')!;
-  const fail = (cause: unknown): void => {
-    error.textContent = cause instanceof Error ? cause.message : 'request failed';
+  const fail = (cause: unknown, labels: Record<number, string> = {}): void => {
+    error.textContent = friendlyError(cause, labels);
   };
 
   const configFields = (prefix: string): string => `
@@ -144,7 +145,11 @@ export function mountLobby(
                 }
               }
             } catch (cause) {
-              fail(cause);
+              fail(cause, {
+                404: 'Game not found — it may have ended.',
+                409: 'Seat taken — refresh and pick another.',
+                403: 'Join refused for this seat.',
+              });
             } finally {
               join.disabled = false;
             }
@@ -154,7 +159,7 @@ export function mountLobby(
         body.appendChild(row);
       }
     } catch (cause) {
-      fail(cause);
+      error.textContent = friendlyError(cause, {}, 'Could not load games — is the server running?');
     }
   };
 
@@ -202,14 +207,17 @@ export function mountLobby(
             await client.startRoom(roundId);
             await showWaiting(roundId, seat);
           } catch (cause) {
-            fail(cause);
+            fail(cause, {
+              403: 'Only the master can start the room.',
+              404: 'Room not found — it may have expired.',
+            });
           } finally {
             startButton.disabled = false;
           }
         });
       }
     } catch (cause) {
-      fail(cause);
+      error.textContent = friendlyError(cause, {}, 'Could not load the room — is the server running?');
     }
   };
 
@@ -236,7 +244,7 @@ export function mountLobby(
         const round = await client.createRound(readConfig('vi-solo'));
         handlers.onStarted(round, 'human');
       } catch (cause) {
-        fail(cause);
+        fail(cause, { 400: 'Could not start the session — check the settings.' });
         button.disabled = false;
       }
     });
@@ -258,7 +266,10 @@ export function mountLobby(
         dialog.innerHTML = '';
         await showWaiting(room.roundId, 'human');
       } catch (cause) {
-        fail(cause);
+        fail(cause, {
+          400: 'Could not create the room — check the settings.',
+          403: 'Room creation refused for this account.',
+        });
       } finally {
         button.disabled = false;
       }

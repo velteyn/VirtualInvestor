@@ -715,6 +715,38 @@ public final class RunningRound {
                             events, tick);
                 }
             }
+            // Every auction order learns its outcome: without a report the
+            // client's mirror strands lone-sided orders as working forever.
+            for (AuctionOrder order : auction.orders()) {
+                long filled = 0L;
+                for (AuctionFill fill : result.fills()) {
+                    if (fill.orderId().equals(order.id())) {
+                        filled += fill.quantity();
+                    }
+                }
+                OrderType type = order.market() ? OrderType.MARKET : OrderType.LIMIT;
+                long leaves = order.quantity() - filled;
+                if (leaves <= 0L) {
+                    events.add(new GameEvent.OrderReport(order.id(), order.participantId(), symbol,
+                            order.side(), type, order.quantity(), order.limitPrice(), filled, 0L,
+                            com.virtualinvestor.core.domain.OrderStatus.FILLED,
+                            com.virtualinvestor.core.domain.OrderEventKind.FILL, null, tick));
+                } else {
+                    if (filled > 0L) {
+                        events.add(new GameEvent.OrderReport(order.id(), order.participantId(), symbol,
+                                order.side(), type, order.quantity(), order.limitPrice(), filled, leaves,
+                                com.virtualinvestor.core.domain.OrderStatus.PARTIAL,
+                                com.virtualinvestor.core.domain.OrderEventKind.PARTIAL_FILL, null, tick));
+                    }
+                    String reason = result.traded()
+                            ? "auction left " + leaves + " unmatched — remainder cancelled"
+                            : "auction produced no match — order cancelled";
+                    events.add(new GameEvent.OrderReport(order.id(), order.participantId(), symbol,
+                            order.side(), type, order.quantity(), order.limitPrice(), filled, 0L,
+                            com.virtualinvestor.core.domain.OrderStatus.CANCELLED,
+                            com.virtualinvestor.core.domain.OrderEventKind.CANCELLED, reason, tick));
+                }
+            }
             events.add(new GameEvent.AuctionClosed(
                     symbol, phase, result.clearingPrice(), result.matchedVolume(), tick));
         }

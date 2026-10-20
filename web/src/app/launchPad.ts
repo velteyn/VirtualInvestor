@@ -4,6 +4,7 @@
  * then land in the lobby: live games, single-player start, room creation.
  */
 import type { BankResponse, RoundResponse, ServerClient } from '../adapters/serverClient';
+import { friendlyError } from './errors';
 import { mountLobby } from './lobby';
 
 export interface LaunchPadHandlers {
@@ -53,8 +54,8 @@ export function mountLaunchPad(
   const note = root.querySelector<HTMLParagraphElement>('#vi-auth-note')!;
   const error = root.querySelector<HTMLParagraphElement>('#vi-error')!;
 
-  const fail = (cause: unknown): void => {
-    error.textContent = cause instanceof Error ? cause.message : 'request failed';
+  const fail = (cause: unknown, labels: Record<number, string> = {}): void => {
+    error.textContent = friendlyError(cause, labels);
   };
 
   /** Logged in: the login page goes away entirely, the lobby owns the page. */
@@ -85,7 +86,10 @@ export function mountLaunchPad(
         enterLobby(response.username);
       }
     } catch (cause) {
-      fail(cause);
+      fail(cause, {
+        401: 'Wrong username or password — check the name and try again.',
+        403: 'Account pending game-master approval — try again once approved.',
+      });
     } finally {
       login.disabled = false;
     }
@@ -105,7 +109,7 @@ export function mountLaunchPad(
       changeBox.hidden = true;
       enterLobby(lastUsername);
     } catch (cause) {
-      fail(cause);
+      fail(cause, { 401: 'Current password is wrong.' });
     } finally {
       doChange.disabled = false;
     }
@@ -120,7 +124,7 @@ export function mountLaunchPad(
           .map((entry) => `<option value="${entry.bankId}">${entry.displayName} — ${entry.feePerShare}/share, min $${entry.ticketMinimum}, deriv ${(entry.seriesRate * 100).toFixed(2)}% min $${entry.seriesMinimum}</option>`)
           .join('');
       } catch (cause) {
-        fail(cause);
+        error.textContent = friendlyError(cause, {}, 'Could not load banks — is the server running?');
       }
     }
   });
@@ -132,7 +136,10 @@ export function mountLaunchPad(
       await client.register(user.value, pass.value, bank.value);
       note.textContent = 'Account created — waiting for game-master approval. Log in once approved.';
     } catch (cause) {
-      fail(cause);
+      fail(cause, {
+        400: 'Could not create the account — check the name, password and bank.',
+        409: 'That player name is taken — pick another.',
+      });
     } finally {
       doRegister.disabled = false;
     }
