@@ -198,11 +198,10 @@ export function mountTerminal(
   company = strip === null || portfolio === null ? null : mountCompany(strip);
   const newswire = strip === null || portfolio === null ? null : mountNewsWire(strip, client, round);
 
-  // A small session banner (kept out of the way on narrow screens).
-  const banner = document.createElement('div');
-  banner.className = 'vi-session';
-  banner.textContent = `Round ${round.roundId} · ${round.preset} · $${round.startingCapital.toLocaleString()} · ${round.durationMinutes}m`;
-  document.body.appendChild(banner);
+  // Session context lives in the page title (browser tab) so no floating
+  // banner can cover the dock tabs.
+  const previousTitle = document.title;
+  document.title = `Round ${round.roundId} · ${round.preset} · $${round.startingCapital.toLocaleString()} · ${round.durationMinutes}m — VirtualInvestor`;
 
   return {
     destroy() {
@@ -217,7 +216,7 @@ export function mountTerminal(
       widget.destroy();
       tradeFeed.dispose();
       newsFeed.dispose();
-      banner.remove();
+      document.title = previousTitle;
       layout.remove();
     },
   };
