@@ -976,7 +976,78 @@ body,
 }
 
 #admin td.vi-actions {
+  width: 1%;
   white-space: nowrap;
+}
+
+#admin .vi-menu {
+  position: relative;
+  display: inline-block;
+}
+
+#admin .vi-menu summary {
+  list-style: none;
+  padding: 6px 14px;
+  background: #1c2030;
+  color: #c7ccd8;
+  border: 1px solid #2a3046;
+  border-radius: 6px;
+  font-weight: 400;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+#admin .vi-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+#admin .vi-menu summary::after {
+  content: " ▾";
+  opacity: 0.6;
+}
+
+#admin .vi-menu summary:hover {
+  border-color: #3a4562;
+  background: #252c42;
+}
+
+#admin .vi-menu-list {
+  position: absolute;
+  right: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 148px;
+  margin-top: 4px;
+  padding: 6px;
+  background: #14161d;
+  border: 1px solid #2a3046;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+#admin .vi-menu-list button {
+  width: 100%;
+  margin: 0;
+  padding: 6px 10px;
+  text-align: left;
+  background: #1c2030;
+  color: #c7ccd8;
+  border: 1px solid #2a3046;
+  font-weight: 400;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+#admin .vi-menu-list button:hover {
+  background: #252c42;
+  border-color: #3a4562;
+}
+
+#admin li .vi-menu {
+  margin-left: auto;
 }
 
 #admin h3 {
@@ -1003,10 +1074,6 @@ body,
   border-radius: 6px;
   font: inherit;
   font-size: 13px;
-}
-
-#admin td.vi-actions button {
-  margin-right: 6px;
 }
 
 #admin li {
