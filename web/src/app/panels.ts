@@ -8,6 +8,7 @@
 import type { LeaderboardEntry, RoundResponse, ServerClient, WirePayload } from '../adapters/serverClient';
 import type { VirtualInvestorTradeFeed } from '../adapters/tradeFeed';
 import { describePosition } from './positions-view';
+import { rivalProfile } from './rivals';
 
 export interface Panels {
   destroy(): void;
@@ -65,6 +66,51 @@ export function mountPanels(
   };
   void refreshRivals();
   const rivalTimer = window.setInterval(refreshRivals, 3000);
+
+  // ── rival dossiers ─────────────────────────────────────────────────────
+  // Clicking a rival's name opens a mini popup with the WST98-style dossier
+  // (role, signature, tells). Reuses the newsroom story overlay so no new
+  // CSS is needed; one card at a time, closed by ×, backdrop or Escape.
+  let rivalCard: HTMLElement | null = null;
+  const closeRivalCard = (): void => {
+    rivalCard?.remove();
+    rivalCard = null;
+  };
+  const openRivalCard = (displayName: string): void => {
+    closeRivalCard();
+    const profile = rivalProfile(displayName);
+    const card = document.createElement('div');
+    card.className = 'vi-story';
+    card.innerHTML = `
+      <div class="vi-story-card" role="dialog" aria-modal="true" aria-label="${escape(profile.name)} dossier">
+        <button class="vi-story-close" aria-label="Close">×</button>
+        <h3 class="vi-story-head">${escape(profile.name)}</h3>
+        <div class="vi-news-meta">${escape(profile.role)} · ${escape(profile.signature)}</div>
+        <p class="vi-story-body">${escape(profile.blurb)}</p>
+        <div class="vi-news-meta">Tells: ${escape(profile.tells)}</div>
+      </div>`;
+    card.addEventListener('click', (event) => {
+      const target = event.target as HTMLElement;
+      if (target === card || target.classList.contains('vi-story-close')) {
+        closeRivalCard();
+      }
+    });
+    document.body.appendChild(card);
+    rivalCard = card;
+  };
+  rivalsRows.addEventListener('click', (event) => {
+    const button = (event.target as HTMLElement).closest('button[data-rival]');
+    const name = button?.getAttribute('data-rival');
+    if (name !== null && name !== undefined) {
+      openRivalCard(name);
+    }
+  });
+  const onRivalKey = (event: KeyboardEvent): void => {
+    if (event.key === 'Escape') {
+      closeRivalCard();
+    }
+  };
+  window.addEventListener('keydown', onRivalKey);
 
   // ── watchlist ──────────────────────────────────────────────────────────
   // Rows are buttons: clicking one switches the chart to that symbol.
@@ -241,6 +287,8 @@ export function mountPanels(
     destroy() {
       window.clearInterval(rivalTimer);
       window.clearTimeout(queryTimer);
+      window.removeEventListener('keydown', onRivalKey);
+      closeRivalCard();
       for (const unsubscribe of unsubscribers) {
         unsubscribe();
       }
@@ -253,7 +301,7 @@ export function mountPanels(
 function renderRival(entry: LeaderboardEntry): string {
   const pct = (entry.returnFraction * 100).toFixed(1);
   const cls = entry.returnFraction >= 0 ? 'vi-up' : 'vi-down';
-  return `<li><span class="vi-rank">${entry.rank}</span><span>${escape(entry.displayName)}</span>
+  return `<li><span class="vi-rank">${entry.rank}</span><button class="vi-link" data-rival="${escape(entry.displayName)}">${escape(entry.displayName)}</button>
     <span class="${cls}">${entry.returnFraction >= 0 ? '+' : ''}${pct}%</span></li>`;
 }
 

@@ -111,4 +111,28 @@ describe('panels mount', () => {
     expect(after).toContain('P&L +600.00');
     panels.destroy();
   });
+
+  it('opens the rival dossier on name click and closes it', async () => {
+    const { panels } = mount();
+    await flush();
+    (document.querySelector('.vi-rivals [data-rival="MARK"]') as HTMLButtonElement).click();
+    const card = document.querySelector('.vi-story-card');
+    expect(card).not.toBeNull();
+    expect(card?.textContent ?? '').toContain('Market maker');
+    (document.querySelector('.vi-story-close') as HTMLButtonElement).click();
+    expect(document.querySelector('.vi-story-card')).toBeNull();
+    panels.destroy();
+  });
+
+  it('closes the dossier on Escape and cleans up on destroy', async () => {
+    const { panels } = mount();
+    await flush();
+    (document.querySelector('.vi-rivals [data-rival="MARK"]') as HTMLButtonElement).click();
+    expect(document.querySelector('.vi-story-card')).not.toBeNull();
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(document.querySelector('.vi-story-card')).toBeNull();
+    (document.querySelector('.vi-rivals [data-rival="MARK"]') as HTMLButtonElement).click();
+    panels.destroy();
+    expect(document.querySelector('.vi-story-card')).toBeNull();
+  });
 });
