@@ -349,8 +349,8 @@ export function mountTicket(
     </label>
     <div id="vi-tk-futureline" class="vi-tk-future" hidden></div>
     <div id="vi-tk-leg" class="vi-ticket-side" hidden>
-      <button data-leg="CALL" class="vi-active">Call</button>
-      <button data-leg="PUT">Put</button>
+      <button data-leg="CALL" class="vi-active" aria-pressed="true">Call</button>
+      <button data-leg="PUT" aria-pressed="false">Put</button>
     </div>
     <div id="vi-tk-ladder" class="vi-tk-ladder" hidden></div>
     <div class="vi-ticket-side">
@@ -623,7 +623,11 @@ export function mountTicket(
   }));
   legButtons.forEach((button) => button.addEventListener('click', () => {
     leg = (button.getAttribute('data-leg') ?? 'CALL') as 'CALL' | 'PUT';
-    legButtons.forEach((b) => b.classList.toggle('vi-active', b === button));
+    legButtons.forEach((b) => {
+      const on = b === button;
+      b.classList.toggle('vi-active', on);
+      b.setAttribute('aria-pressed', String(on));
+    });
     ladderPick = '';
     renderLadder();
     renderPreview();

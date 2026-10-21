@@ -761,6 +761,17 @@ body,
   color: #1a0b0b;
 }
 
+/* Call/Put leg is a switch: selected reads green, unselected muted grey. */
+.vi-ticket-side button[data-leg].vi-active {
+  background: #26a69a;
+  border-color: #26a69a;
+  color: #08130f;
+}
+
+.vi-ticket-side button[data-leg]:not(.vi-active) {
+  opacity: 0.55;
+}
+
 .vi-tk-lots {
   display: flex;
   gap: 6px;
