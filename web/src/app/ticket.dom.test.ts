@@ -108,7 +108,9 @@ describe('ticket mount', () => {
     await flush();
     const hidden = (sel: string): boolean => {
       const el = column.querySelector(sel) as HTMLElement | null;
-      return el !== null && el.hidden;
+      // TS7 types IDL-reflected `hidden` as string|boolean ("until-found");
+      // the ticket only ever assigns booleans, so non-false means hidden.
+      return el !== null && el.hidden !== false;
     };
     column.querySelector<HTMLButtonElement>('[data-mode="FUTURES"]')?.click();
     expect(hidden('[data-series-row]')).toBe(true);
