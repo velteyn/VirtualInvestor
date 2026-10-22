@@ -172,6 +172,14 @@ infra/             docker-compose.yml (PostgreSQL)
 openspec/          specs, active changes, and the archive
 ```
 
+## Contributing
+
+Bug reports, balance notes with numbers, and small focused pull requests are
+welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for the checks every change
+must pass (`mvn test`, `npm test`, `npm run build`), plus the commit and docs
+conventions. Please follow the [Code of Conduct](CODE_OF_CONDUCT.md), and
+report vulnerabilities privately per [SECURITY.md](SECURITY.md).
+
 ## License
 
 VirtualInvestor is free software: you can redistribute and modify it under the
