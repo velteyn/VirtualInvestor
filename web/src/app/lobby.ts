@@ -10,6 +10,7 @@ import type {
   ServerClient,
 } from '../adapters/serverClient';
 import { friendlyError } from './errors';
+import { escapeHtml as escape } from './html';
 
 const PRESETS: Array<RoundConfig['preset']> = ['ARCADE', 'REALISTIC', 'HARDCORE'];
 const CAPITALS = [25_000, 50_000, 100_000, 250_000, 1_000_000];
@@ -55,7 +56,7 @@ export function mountLobby(
     <div class="vi-lobby">
       <div class="vi-lobby-head">
         <h2>Lobby</h2>
-        <span class="vi-sub">Playing as ${username}</span>
+        <span class="vi-sub">Playing as ${escape(username)}</span>
         <button id="vi-logout" title="Log out">Log out</button>
       </div>
       <div class="vi-lobby-row">
@@ -124,7 +125,7 @@ export function mountLobby(
           <td>${game.preset}</td>
           <td>${formatLeft(game.timeLeftMillis)}</td>
           <td>${game.seatsTaken}/${game.seatsTotal}</td>
-          <td>${game.leader}</td>
+          <td>${escape(game.leader)}</td>
           <td></td>`;
         // Join only where the server says this player may sit: own solo seat,
         // a free or held room seat — never another player's solo world.
@@ -180,7 +181,7 @@ export function mountLobby(
       const isMaster = game.masterPlayerId !== null && game.masterPlayerId === client.playerId();
       const seats = Array.from({ length: game.seatsTotal }, (_, index) => {
         const name = game.humans[index];
-        return `<li>${name === undefined ? `Seat ${index + 1} — open` : `${name}${index === 0 ? ' (master)' : ''}`}</li>`;
+        return `<li>${name === undefined ? `Seat ${index + 1} — open` : `${escape(name)}${index === 0 ? ' (master)' : ''}`}</li>`;
       }).join('');
       waiting.innerHTML = `
         <div class="vi-waiting">

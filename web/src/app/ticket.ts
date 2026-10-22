@@ -7,6 +7,7 @@
 import type { OrderCommand, RoundResponse, ServerClient, SymbolResponse, WirePayload } from '../adapters/serverClient';
 import type { VirtualInvestorTradeFeed } from '../adapters/tradeFeed';
 import { socketErrorLabel } from './errors';
+import { escapeHtml as escape } from './html';
 import companies from '../assets/companies.json';
 
 export interface Ticket {
@@ -501,7 +502,8 @@ export function mountTicket(
       const opt = (m: { ticker: string }): string => {
         const ref = chainRefs.get(m.ticker);
         const hint = ref !== undefined && kindOf(m.ticker) !== 'FUTURE' ? ` (~$${ref.toFixed(2)})` : '';
-        return `<option value="${m.ticker}">${m.ticker}${hint}</option>`;
+        const safe = escape(m.ticker);
+        return `<option value="${safe}">${safe}${hint}</option>`;
       };
       chainOptions =
         (futures.length > 0 ? `<optgroup label="Futures">${futures.map(opt).join('')}</optgroup>` : '')
@@ -569,7 +571,8 @@ export function mountTicket(
     }
     ladder.innerHTML = rows.map((row) => {
       const active = row.ticker === ladderPick ? 'vi-active' : '';
-      return `<button data-strike="${row.ticker}" class="${active}">${row.strike}`
+      const safe = escape(row.ticker);
+      return `<button data-strike="${safe}" class="${active}">${row.strike}`
         + ` @ ${row.premium.toFixed(2)}${row.itm ? ' ITM' : ''}</button>`;
     }).join('') || '<span class="vi-empty">No strikes listed</span>';
   };
@@ -920,7 +923,7 @@ export function mountTicket(
     const econ = econOf(command);
     const price = command.price ?? touchPrice();
     confirmLines.innerHTML =
-      `<div>${command.side} ${command.quantity} ${command.symbol}`
+      `<div>${command.side} ${command.quantity} ${escape(command.symbol)}`
       + ` @ ${Number.isFinite(price) && price > 0 ? price.toFixed(2) : 'market'}</div>`
       + `<div>Notional $${econ.notional.toFixed(0)} + $${econ.fee.toFixed(2)} fee`
       + (econ.lock > 0 ? ` + $${econ.lock.toFixed(0)} locked` : '')

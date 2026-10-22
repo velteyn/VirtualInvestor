@@ -3,6 +3,12 @@
 # PostgreSQL (persist module); the web job typechecks, unit-tests and builds.
 name: ci
 
+# Least privilege: jobs only need to read the repo (checkout) and report
+# status. Tightening the default broad token answers the CodeQL
+# missing-workflow-permissions alert.
+permissions:
+  contents: read
+
 on:
   push:
     branches: [master]
