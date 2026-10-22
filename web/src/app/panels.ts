@@ -9,6 +9,7 @@ import type { LeaderboardEntry, RoundResponse, ServerClient, WirePayload } from 
 import type { VirtualInvestorTradeFeed } from '../adapters/tradeFeed';
 import { describePosition } from './positions-view';
 import { rivalProfile } from './rivals';
+import { escapeHtml as escape } from './html';
 
 export interface Panels {
   destroy(): void;
@@ -167,7 +168,9 @@ export function mountPanels(
       const price = prices.get(symbol);
       const shown = price === undefined ? '—' : price.toFixed(2);
       const cls = symbol === selected ? 'vi-active' : '';
-      return `<li class="${cls}"><button data-symbol="${symbol}"><span>${symbol}</span><span>${shown}</span></button><button data-remove="${symbol}" aria-label="Remove ${symbol}">×</button></li>`;
+      // Symbols are user-typed (and persisted): escape every interpolation.
+      const safe = escape(symbol);
+      return `<li class="${cls}"><button data-symbol="${safe}"><span>${safe}</span><span>${shown}</span></button><button data-remove="${safe}" aria-label="Remove ${safe}">×</button></li>`;
     }).join('');
   };
   renderWatchlist();
@@ -303,8 +306,4 @@ function renderRival(entry: LeaderboardEntry): string {
   const cls = entry.returnFraction >= 0 ? 'vi-up' : 'vi-down';
   return `<li><span class="vi-rank">${entry.rank}</span><button class="vi-link" data-rival="${escape(entry.displayName)}">${escape(entry.displayName)}</button>
     <span class="${cls}">${entry.returnFraction >= 0 ? '+' : ''}${pct}%</span></li>`;
-}
-
-function escape(text: string): string {
-  return text.replace(/[&<>"]/g, (c) => (c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : '&quot;'));
 }
