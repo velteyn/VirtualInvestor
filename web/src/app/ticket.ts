@@ -922,12 +922,17 @@ export function mountTicket(
   const askConfirm = (command: OrderCommand, rules: string[]): void => {
     const econ = econOf(command);
     const price = command.price ?? touchPrice();
+    // Every interpolated value goes through the escaper, even enums and
+    // numbers: CodeQL tracks UI-state taint into this sink, and the escaper
+    // is a no-op for values that cannot carry markup.
+    const side = escape(command.side);
+    const quantity = escape(String(command.quantity));
+    const priceText = escape(Number.isFinite(price) && price > 0 ? price.toFixed(2) : 'market');
     confirmLines.innerHTML =
-      `<div>${command.side} ${command.quantity} ${escape(command.symbol)}`
-      + ` @ ${Number.isFinite(price) && price > 0 ? price.toFixed(2) : 'market'}</div>`
-      + `<div>Notional $${econ.notional.toFixed(0)} + $${econ.fee.toFixed(2)} fee`
-      + (econ.lock > 0 ? ` + $${econ.lock.toFixed(0)} locked` : '')
-      + ` → $${econ.left.toFixed(0)} left</div>`;
+      `<div>${side} ${quantity} ${escape(command.symbol)} @ ${priceText}</div>`
+      + `<div>Notional $${escape(econ.notional.toFixed(0))} + $${escape(econ.fee.toFixed(2))} fee`
+      + (econ.lock > 0 ? ` + $${escape(econ.lock.toFixed(0))} locked` : '')
+      + ` → $${escape(econ.left.toFixed(0))} left</div>`;
     confirmReasons.innerHTML = rules
       .map((rule) => `<div>• ${RULE_LABELS[rule] ?? escape(rule)}</div>`).join('');
     confirmBox.hidden = false;
