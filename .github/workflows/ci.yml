@@ -1,0 +1,50 @@
+# Continuous integration: the same checks CONTRIBUTING.md asks for, run on
+# every push to master and every pull request targeting it. Server tests need
+# PostgreSQL (persist module); the web job typechecks, unit-tests and builds.
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: virtualinvestor
+          POSTGRES_USER: vi
+          POSTGRES_PASSWORD: vi
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U vi -d virtualinvestor"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: cd server && mvn test
+
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: cd web && npm ci
+      - run: cd web && npm test -- --run
+      - run: cd web && npm run build
