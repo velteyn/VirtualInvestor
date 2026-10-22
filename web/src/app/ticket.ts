@@ -929,7 +929,7 @@ export function mountTicket(
       + (econ.lock > 0 ? ` + $${econ.lock.toFixed(0)} locked` : '')
       + ` → $${econ.left.toFixed(0)} left</div>`;
     confirmReasons.innerHTML = rules
-      .map((rule) => `<div>• ${RULE_LABELS[rule] ?? rule}</div>`).join('');
+      .map((rule) => `<div>• ${RULE_LABELS[rule] ?? escape(rule)}</div>`).join('');
     confirmBox.hidden = false;
     const onOk = (): void => {
       confirmOk.removeEventListener('click', onOk);
