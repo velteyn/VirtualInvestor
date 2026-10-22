@@ -1,0 +1,23 @@
+# Dependabot version updates: weekly PRs for the three ecosystems in this repo.
+# Security updates are enabled separately in the repo settings; these entries
+# only control routine version bumps (capped so the PR list stays reviewable).
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+  - package-ecosystem: maven
+    directory: /server
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
