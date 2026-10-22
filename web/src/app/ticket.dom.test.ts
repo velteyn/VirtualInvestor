@@ -106,8 +106,10 @@ describe('ticket mount', () => {
   it('mode switching hides unrelated rows', async () => {
     const { column, ticket } = mount();
     await flush();
-    const hidden = (sel: string): boolean =>
-      (column.querySelector(sel) as HTMLElement)?.hidden ?? false;
+    const hidden = (sel: string): boolean => {
+      const el = column.querySelector(sel) as HTMLElement | null;
+      return el !== null && el.hidden;
+    };
     column.querySelector<HTMLButtonElement>('[data-mode="FUTURES"]')?.click();
     expect(hidden('[data-series-row]')).toBe(true);
     expect(hidden('#vi-tk-futureline')).toBe(false);
